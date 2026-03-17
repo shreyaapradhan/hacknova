@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raahi — Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --peach:#FFAB76;--peach-lt:#FFD6B8;--yellow:#FFE033;--yellow-dk:#F5C518;
+      --warm-100:#FFF8EE;--warm-200:#FFE8C8;--deep:#2B1A0F;--mid:#5C3D1E;--muted:#9C7B5A;
+      --success:#22c55e;--error:#ef4444;--alert:#f97316;
+    }
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#1a0e05;color:var(--deep);overflow-x:hidden;}
+
+    /* ── BG ── */
+    .bg-canvas{position:fixed;inset:0;z-index:0;overflow:hidden;background:linear-gradient(135deg,#1a0e05 0%,#2e1a08 40%,#1e0f06 100%);}
+    .bg-canvas::before{content:'';position:absolute;inset:-50%;background:radial-gradient(ellipse 60% 40% at 20% 30%,rgba(255,171,118,.15) 0%,transparent 60%),radial-gradient(ellipse 50% 35% at 80% 70%,rgba(255,224,51,.10) 0%,transparent 55%);animation:bgShift 12s ease-in-out infinite alternate;}
+    @keyframes bgShift{0%{transform:translate(0,0);}100%{transform:translate(3%,2%);}}
+    .orb{position:absolute;border-radius:50%;filter:blur(70px);opacity:.25;animation:floatOrb linear infinite;}
+    .orb-1{width:400px;height:400px;background:var(--peach);top:-100px;left:-80px;animation-duration:20s;}
+    .orb-2{width:300px;height:300px;background:var(--yellow);bottom:-80px;right:-60px;animation-duration:25s;animation-delay:-8s;}
+    .orb-3{width:200px;height:200px;background:var(--peach-lt);top:50%;right:5%;animation-duration:17s;animation-delay:-5s;}
+    @keyframes floatOrb{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(18px,-22px) scale(1.04);}}
+    .grid-lines{position:absolute;inset:0;background-image:linear-gradient(rgba(255,171,118,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,171,118,.03) 1px,transparent 1px);background-size:60px 60px;}
+    .particles{position:absolute;inset:0;pointer-events:none;}
+    .particle{position:absolute;border-radius:50%;opacity:0;animation:rise linear infinite;}
+    @keyframes rise{0%{transform:translateY(0);opacity:0;}10%{opacity:.5;}90%{opacity:.2;}100%{transform:translateY(-100vh);opacity:0;}}
+
+    /* ── NAV ── */
+    nav{position:relative;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:16px 28px;background:rgba(255,255,255,.07);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,214,184,.15);}
+    .nav-brand{display:flex;align-items:center;gap:10px;}
+    .nav-logo{width:38px;height:38px;background:linear-gradient(135deg,var(--peach),var(--yellow));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+    .nav-title{font-family:'Playfair Display',serif;font-size:20px;color:#fff;font-weight:900;}
+    .nav-sub{font-size:11px;color:rgba(255,255,255,.5);margin-top:-2px;}
+    .nav-right{display:flex;align-items:center;gap:12px;}
+    .nav-user{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,214,184,.2);border-radius:20px;padding:6px 14px 6px 8px;}
+    .nav-avatar{width:28px;height:28px;background:linear-gradient(135deg,var(--peach),var(--yellow));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;}
+    .nav-uname{font-size:13px;color:rgba(255,255,255,.85);font-weight:500;}
+    .logout-btn{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:7px 14px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;}
+    .logout-btn:hover{background:rgba(239,68,68,.25);color:#fff;}
+
+    /* ── PAGE WRAPPER ── */
+    .page{position:relative;z-index:10;max-width:900px;margin:0 auto;padding:32px 20px 60px;}
+
+    /* ── WELCOME HERO ── */
+    .hero{text-align:center;margin-bottom:40px;animation:fadeUp .6s ease both;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:none;}}
+    .hero-greeting{font-size:13px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;}
+    .hero-name{font-family:'Playfair Display',serif;font-size:36px;color:#fff;font-weight:900;line-height:1.2;}
+    .hero-name span{background:linear-gradient(135deg,var(--peach),var(--yellow));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+    .hero-sub{font-size:14px;color:rgba(255,255,255,.45);margin-top:8px;line-height:1.6;}
+
+    /* ── ALERT BANNER ── */
+    .alert-banner{
+      display:flex;align-items:center;gap:14px;
+      background:linear-gradient(135deg,rgba(249,115,22,.18),rgba(239,68,68,.12));
+      border:1.5px solid rgba(249,115,22,.4);
+      border-radius:16px;padding:16px 20px;margin-bottom:28px;
+      animation:fadeUp .6s .1s ease both;
+      cursor:pointer;transition:all .25s;
+    }
+    .alert-banner:hover{border-color:rgba(249,115,22,.7);background:linear-gradient(135deg,rgba(249,115,22,.25),rgba(239,68,68,.18));}
+    .alert-pulse{width:44px;height:44px;background:rgba(239,68,68,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;animation:alertPulse 1.5s ease-in-out infinite;}
+    @keyframes alertPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4);}50%{box-shadow:0 0 0 10px rgba(239,68,68,0);}}
+    .alert-text{}
+    .alert-title{font-size:14px;font-weight:700;color:#fca5a5;margin-bottom:2px;}
+    .alert-desc{font-size:12px;color:rgba(255,255,255,.5);}
+    .alert-arrow{margin-left:auto;font-size:18px;color:rgba(255,255,255,.3);}
+
+    /* ── STATUS BAR ── */
+    .status-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px;animation:fadeUp .6s .15s ease both;}
+    .stat-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,214,184,.12);border-radius:14px;padding:16px;text-align:center;}
+    .stat-icon{font-size:22px;margin-bottom:6px;}
+    .stat-val{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#fff;}
+    .stat-label{font-size:11px;color:rgba(255,255,255,.4);margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
+    .stat-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:5px;animation:blink 2s ease-in-out infinite;}
+    @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+    /* ── SECTION TITLE ── */
+    .section-title{font-family:'Playfair Display',serif;font-size:18px;color:#fff;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+    .section-title::after{content:'';flex:1;height:1px;background:rgba(255,214,184,.1);margin-left:4px;}
+
+    /* ── ACTION CARDS ── */
+    .action-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:36px;animation:fadeUp .6s .2s ease both;}
+    .action-card{
+      background:rgba(255,255,255,.06);
+      border:1.5px solid rgba(255,214,184,.12);
+      border-radius:20px;padding:24px;
+      cursor:pointer;transition:all .28s cubic-bezier(.22,1,.36,1);
+      text-decoration:none;display:block;position:relative;overflow:hidden;
+    }
+    .action-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,171,118,0),rgba(255,224,51,0));transition:background .3s;}
+    .action-card:hover{border-color:rgba(255,171,118,.45);transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,.3);}
+    .action-card:hover::before{background:linear-gradient(135deg,rgba(255,171,118,.07),rgba(255,224,51,.05));}
+    .action-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:14px;}
+    .action-icon.orange{background:linear-gradient(135deg,rgba(255,171,118,.25),rgba(255,224,51,.15));border:1px solid rgba(255,171,118,.3);}
+    .action-icon.blue{background:linear-gradient(135deg,rgba(96,165,250,.2),rgba(59,130,246,.15));border:1px solid rgba(96,165,250,.25);}
+    .action-icon.green{background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(16,185,129,.15));border:1px solid rgba(34,197,94,.25);}
+    .action-icon.red{background:linear-gradient(135deg,rgba(239,68,68,.2),rgba(249,115,22,.15));border:1px solid rgba(239,68,68,.25);}
+    .action-title{font-family:'Playfair Display',serif;font-size:16px;color:#fff;font-weight:700;margin-bottom:5px;}
+    .action-desc{font-size:12px;color:rgba(255,255,255,.4);line-height:1.5;}
+    .action-arrow{position:absolute;top:18px;right:18px;font-size:16px;color:rgba(255,255,255,.2);transition:all .25s;}
+    .action-card:hover .action-arrow{color:var(--peach);transform:translateX(3px);}
+    .action-badge{position:absolute;top:16px;right:16px;background:var(--error);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;animation:alertPulse 1.5s ease-in-out infinite;}
+
+    /* ── RECENT ACTIVITY ── */
+    .activity-list{animation:fadeUp .6s .25s ease both;}
+    .activity-item{display:flex;align-items:center;gap:14px;padding:14px 16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,214,184,.08);border-radius:14px;margin-bottom:10px;transition:background .2s;}
+    .activity-item:hover{background:rgba(255,255,255,.07);}
+    .act-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+    .act-text{}
+    .act-title{font-size:13px;color:rgba(255,255,255,.85);font-weight:500;}
+    .act-time{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px;}
+    .act-status{margin-left:auto;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;flex-shrink:0;}
+    .act-status.safe{background:rgba(34,197,94,.15);color:#86efac;}
+    .act-status.alert{background:rgba(239,68,68,.15);color:#fca5a5;}
+    .act-status.info{background:rgba(255,171,118,.15);color:#fed7aa;}
+
+    /* ── TOAST ── */
+    .toast{position:fixed;top:22px;left:50%;transform:translateX(-50%) translateY(-90px);z-index:9999;background:var(--deep);color:#fff;padding:13px 22px;border-radius:14px;font-size:13px;font-weight:500;box-shadow:0 8px 32px rgba(0,0,0,.4);transition:transform .4s cubic-bezier(.22,1,.36,1);white-space:nowrap;max-width:90vw;}
+    .toast.show{transform:translateX(-50%) translateY(0);}
+    .toast.info-t{border-left:4px solid var(--peach);}
+    .toast.success-t{border-left:4px solid var(--success);}
+    .toast.error-t{border-left:4px solid var(--error);}
+
+    /* ── MOBILE ── */
+    @media(max-width:600px){
+      nav{padding:12px 16px;}
+      .nav-uname{display:none;}
+      .hero-name{font-size:26px;}
+      .action-grid{grid-template-columns:1fr;}
+      .status-row{grid-template-columns:1fr 1fr 1fr;}
+      .page{padding:24px 14px 50px;}
+    }
+    @media(max-width:400px){
+      .status-row{grid-template-columns:1fr;}
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-canvas">
+  <div class="grid-lines"></div>
+  <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+  <div class="particles" id="particles"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <div class="nav-logo">🛡️</div>
+    <div>
+      <div class="nav-title">Raahi</div>
+      <div class="nav-sub">Trusted Contact Portal</div>
+    </div>
+  </div>
+  <div class="nav-right">
+    <div class="nav-user">
+      <div class="nav-avatar">👤</div>
+      <span class="nav-uname" id="navName">Contact</span>
+    </div>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<!-- PAGE -->
+<div class="page">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-greeting">Welcome back</div>
+    <div class="hero-name">Hello, <span id="heroName">Trusted Guardian</span> 👋</div>
+    <div class="hero-sub">You're connected to Raahi's safety network. Monitor and protect the ones you care about.</div>
+  </div>
+
+  <!-- ALERT BANNER -->
+  <div class="alert-banner" onclick="window.location.href='user-stream.html'">
+    <div class="alert-pulse">🚨</div>
+    <div class="alert-text">
+      <div class="alert-title">Emergency Alert Active — Priya Sharma</div>
+      <div class="alert-desc">SOS triggered · 2 minutes ago · Tap to view live feed</div>
+    </div>
+    <div class="alert-arrow">→</div>
+  </div>
+
+  <!-- STATUS ROW -->
+  <div class="status-row">
+    <div class="stat-card">
+      <div class="stat-icon">🛡️</div>
+      <div class="stat-val"><span class="stat-dot"></span>Safe</div>
+      <div class="stat-label">User Status</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📍</div>
+      <div class="stat-val">Live</div>
+      <div class="stat-label">Location</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-val">3</div>
+      <div class="stat-label">Alerts Today</div>
+    </div>
+  </div>
+
+  <!-- ACTION CARDS -->
+  <div class="section-title">Quick Actions</div>
+  <div class="action-grid">
+
+    <a class="action-card" href="user-stream.html">
+      <div class="action-badge" id="emergencyBadge">LIVE</div>
+      <div class="action-icon red">🚨</div>
+      <div class="action-title">Emergency Feed</div>
+      <div class="action-desc">View live location, camera and audio stream during an active alert.</div>
+    </a>
+
+    <a class="action-card" href="info.html">
+      <div class="action-arrow">→</div>
+      <div class="action-icon orange">👤</div>
+      <div class="action-title">User Profile</div>
+      <div class="action-desc">View the registered user's personal details, address and ID photo.</div>
+    </a>
+
+    <a class="action-card" href="user-stream.html#location">
+      <div class="action-arrow">→</div>
+      <div class="action-icon blue">📍</div>
+      <div class="action-title">Track Location</div>
+      <div class="action-desc">Open the live map to see the user's current GPS coordinates.</div>
+    </a>
+
+    <a class="action-card" href="user-stream.html#camera">
+      <div class="action-arrow">→</div>
+      <div class="action-icon green">📹</div>
+      <div class="action-title">Live Camera</div>
+      <div class="action-desc">Access the live camera and audio feed from the user's device.</div>
+    </a>
+
+  </div>
+
+  <!-- RECENT ACTIVITY -->
+  <div class="section-title">Recent Activity</div>
+  <div class="activity-list">
+    <div class="activity-item">
+      <div class="act-icon" style="background:rgba(239,68,68,.15)">🚨</div>
+      <div class="act-text">
+        <div class="act-title">SOS Alert Triggered</div>
+        <div class="act-time">Today, 4:32 PM · KC College, Thane</div>
+      </div>
+      <span class="act-status alert">Active</span>
+    </div>
+    <div class="activity-item">
+      <div class="act-icon" style="background:rgba(34,197,94,.15)">✅</div>
+      <div class="act-text">
+        <div class="act-title">User marked Safe</div>
+        <div class="act-time">Today, 1:15 PM</div>
+      </div>
+      <span class="act-status safe">Resolved</span>
+    </div>
+    <div class="activity-item">
+      <div class="act-icon" style="background:rgba(255,171,118,.15)">📍</div>
+      <div class="act-text">
+        <div class="act-title">Location shared</div>
+        <div class="act-time">Yesterday, 9:42 PM · Thane West</div>
+      </div>
+      <span class="act-status info">Info</span>
+    </div>
+    <div class="activity-item">
+      <div class="act-icon" style="background:rgba(96,165,250,.15)">👤</div>
+      <div class="act-text">
+        <div class="act-title">Profile registered</div>
+        <div class="act-time">2 days ago</div>
+      </div>
+      <span class="act-status info">Setup</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /* PARTICLES */
+  (()=>{
+    const pc=document.getElementById('particles');
+    for(let i=0;i<18;i++){
+      const p=document.createElement('div');p.className='particle';
+      const sz=Math.random()*3+2;
+      p.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;bottom:-10px;background:${Math.random()>.5?'#FFE033':'#FFAB76'};animation-duration:${Math.random()*14+10}s;animation-delay:${Math.random()*-20}s;`;
+      pc.appendChild(p);
+    }
+  })();
+
+  /* LOAD USER */
+  window.addEventListener('load',()=>{
+    try{
+      const d=JSON.parse(localStorage.getItem('trustedContactData')||'{}');
+      const n=d.name||'Trusted Guardian';
+      document.getElementById('heroName').textContent=n;
+      document.getElementById('navName').textContent=n.split(' ')[0];
+    }catch(e){}
+  });
+
+  function logout(){
+    localStorage.clear();
+    window.location.href='trusted-contact-portal.html';
+  }
+
+  /* TOAST */
+  let toastT=null;
+  function showToast(msg,type='info',dur=3200){
+    const el=document.getElementById('toast');
+    el.textContent=msg;el.className=`toast ${type}-t show`;
+    clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),dur);
+  }
+</script>
+</body>
+</html>

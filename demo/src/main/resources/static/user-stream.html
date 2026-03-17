@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raahi — Live Monitor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+  <style>
+    :root{--peach:#FFAB76;--yellow:#FFE033;--deep:#2B1A0F;--success:#22c55e;--error:#ef4444;}
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#1a0e05;color:#fff;overflow-x:hidden;}
+    .bg-canvas{position:fixed;inset:0;z-index:0;background:linear-gradient(135deg,#1a0e05 0%,#2e1a08 40%,#1e0f06 100%);}
+    .bg-canvas::before{content:'';position:absolute;inset:-50%;background:radial-gradient(ellipse 60% 40% at 20% 30%,rgba(255,171,118,.12) 0%,transparent 60%);}
+    .grid-lines{position:absolute;inset:0;background-image:linear-gradient(rgba(255,171,118,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,171,118,.03) 1px,transparent 1px);background-size:60px 60px;}
+    nav{position:relative;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(255,255,255,.06);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,214,184,.12);}
+    .back-btn{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,214,184,.15);color:rgba(255,255,255,.7);padding:7px 14px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;}
+    .back-btn:hover{background:rgba(255,255,255,.14);color:#fff;}
+    .nav-brand{display:flex;align-items:center;gap:8px;}
+    .nav-logo{width:32px;height:32px;background:linear-gradient(135deg,var(--peach),var(--yellow));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;}
+    .nav-title{font-family:'Playfair Display',serif;font-size:17px;color:#fff;font-weight:700;}
+    .status-badge{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;transition:all .4s;}
+    .status-badge.safe{background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.35);color:#86efac;}
+    .status-badge.sos{background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);color:#fca5a5;}
+    .status-dot{width:7px;height:7px;border-radius:50%;}
+    .status-badge.safe .status-dot{background:#22c55e;}
+    .status-badge.sos  .status-dot{background:#ef4444;animation:blink 1.2s ease-in-out infinite;}
+    @keyframes blink{0%,100%{opacity:1;}50%{opacity:.2;}}
+    .page{position:relative;z-index:10;max-width:860px;margin:0 auto;padding:28px 20px 60px;}
+    .identity-card{display:flex;align-items:center;gap:16px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,214,184,.18);border-radius:18px;padding:20px 24px;margin-bottom:24px;}
+    .id-avatar{width:56px;height:56px;background:linear-gradient(135deg,var(--peach),var(--yellow));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;transition:all .4s;}
+    .id-name{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#fff;margin-bottom:4px;}
+    .id-meta{font-size:12px;color:rgba(255,255,255,.45);line-height:1.7;}
+    .safe-screen{text-align:center;padding:20px 0 10px;}
+    .safe-icon-wrap{width:90px;height:90px;background:rgba(34,197,94,.12);border:2px solid rgba(34,197,94,.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:42px;margin:0 auto 18px;animation:safePulse 3s ease-in-out infinite;}
+    @keyframes safePulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.3);}50%{box-shadow:0 0 0 16px rgba(34,197,94,0);}}
+    .safe-title{font-family:'Playfair Display',serif;font-size:22px;color:#86efac;margin-bottom:8px;}
+    .safe-sub{font-size:13px;color:rgba(255,255,255,.4);line-height:1.7;max-width:340px;margin:0 auto 24px;}
+    .waiting-bar{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 16px;max-width:380px;margin:0 auto;}
+    .waiting-ring{width:18px;height:18px;border:2px solid rgba(255,171,118,.4);border-top-color:var(--peach);border-radius:50%;animation:spin .9s linear infinite;flex-shrink:0;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .waiting-text{font-size:12px;color:rgba(255,255,255,.4);}
+    .resolved-banner{display:none;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(16,185,129,.08));border:1.5px solid rgba(34,197,94,.3);border-radius:16px;padding:16px 20px;margin-bottom:20px;}
+    .resolved-banner.visible{display:flex;}
+    .resolved-icon{width:46px;height:46px;background:rgba(34,197,94,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+    .resolved-title{font-family:'Playfair Display',serif;font-size:15px;color:#86efac;font-weight:700;margin-bottom:2px;}
+    .resolved-meta{font-size:12px;color:rgba(255,255,255,.4);}
+    .emg-banner{display:none;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(239,68,68,.18),rgba(249,115,22,.1));border:1.5px solid rgba(239,68,68,.35);border-radius:16px;padding:16px 20px;margin-bottom:24px;}
+    .emg-banner.visible{display:flex;}
+    .emg-pulse{width:46px;height:46px;background:rgba(239,68,68,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;animation:emgPulse 1.5s ease-in-out infinite;}
+    @keyframes emgPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5);}50%{box-shadow:0 0 0 12px rgba(239,68,68,0);}}
+    .emg-title{font-family:'Playfair Display',serif;font-size:15px;color:#fca5a5;font-weight:700;margin-bottom:2px;}
+    .emg-meta{font-size:12px;color:rgba(255,255,255,.4);}
+    .emg-timer{margin-left:auto;text-align:right;flex-shrink:0;}
+    .emg-time-val{font-family:'Playfair Display',serif;font-size:22px;color:#ef4444;font-weight:700;}
+    .emg-time-lbl{font-size:10px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.5px;}
+    .live-sections{display:none;}.live-sections.visible{display:block;}
+    .stream-section{margin-bottom:18px;}
+    .section-header{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,214,184,.12);border-radius:16px;padding:16px 20px;cursor:pointer;transition:all .28s;user-select:none;}
+    .section-header.open{border-color:rgba(255,171,118,.4);border-bottom-left-radius:0;border-bottom-right-radius:0;background:rgba(255,171,118,.06);}
+    .sh-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+    .sh-icon.loc{background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.2);}
+    .sh-icon.cam{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.2);}
+    .sh-icon.aud{background:rgba(255,171,118,.15);border:1px solid rgba(255,171,118,.2);}
+    .sh-title{font-family:'Playfair Display',serif;font-size:14px;color:#fff;font-weight:700;margin-bottom:2px;}
+    .sh-desc{font-size:11px;color:rgba(255,255,255,.4);}
+    .sh-arrow{margin-left:auto;font-size:18px;color:rgba(255,255,255,.3);transition:transform .3s;}
+    .section-header.open .sh-arrow{transform:rotate(90deg);color:var(--peach);}
+    .sh-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.4px;text-transform:uppercase;}
+    .sh-badge.live{background:rgba(239,68,68,.2);color:#fca5a5;border:1px solid rgba(239,68,68,.3);}
+    .sh-badge.loading{background:rgba(251,191,36,.12);color:#fde68a;border:1px solid rgba(251,191,36,.25);}
+    .sh-badge.ended{background:rgba(148,163,184,.1);color:#94a3b8;border:1px solid rgba(148,163,184,.2);}
+    .panel-content{max-height:0;overflow:hidden;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,171,118,.4);border-top:none;border-bottom-left-radius:16px;border-bottom-right-radius:16px;transition:max-height .5s cubic-bezier(.22,1,.36,1),padding .4s;}
+    .panel-content.open{max-height:700px;padding:20px;}
+    #map{height:340px;border-radius:12px;overflow:hidden;}
+    .map-info{display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 14px;background:rgba(255,255,255,.05);border-radius:10px;}
+    .coord-val{color:var(--peach);font-weight:600;font-size:12px;}
+    .gps-status-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+    .gps-pill{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;}
+    .gps-pill.tracking{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#86efac;}
+    .gps-pill.waiting{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25);color:#fde68a;}
+    .gps-pill.ended{background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.2);color:#94a3b8;}
+    .gps-pill-dot{width:5px;height:5px;border-radius:50%;background:#22c55e;animation:blink 2s ease infinite;}
+    .gps-pill.waiting .gps-pill-dot{background:#fbbf24;animation:blink 1s ease infinite;}
+    .gps-pill.ended  .gps-pill-dot{background:#94a3b8;animation:none;}
+    .update-stamp{font-size:11px;color:rgba(255,255,255,.3);margin-left:auto;}
+    .map-btn{display:flex;align-items:center;gap:5px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#93c5fd;padding:7px 14px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;margin-top:10px;}
+    #videoFeed{width:100%;border-radius:12px;background:#000;display:block;max-height:300px;object-fit:cover;}
+    .video-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;border:2px dashed rgba(255,171,118,.15);border-radius:12px;color:rgba(255,255,255,.25);gap:10px;text-align:center;}
+    .video-placeholder .icon{font-size:36px;}
+    .video-placeholder p{font-size:13px;line-height:1.7;}
+    .cam-status-row{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:rgba(255,255,255,.4);}
+    .cam-dot{width:6px;height:6px;border-radius:50%;background:#fbbf24;animation:blink 1s ease-in-out infinite;}
+    .cam-dot.live{background:#22c55e;animation:blink 2s ease-in-out infinite;}
+    .cam-dot.ended{background:#94a3b8;animation:none;}
+    .cam-controls{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;}
+    .cam-btn{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.7);padding:8px 15px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;}
+    .audio-wrapper{background:rgba(255,255,255,.04);border:1px solid rgba(255,171,118,.12);border-radius:12px;padding:16px;}
+    .audio-viz{display:flex;align-items:center;justify-content:center;gap:4px;height:46px;margin-bottom:12px;}
+    .bar{width:5px;background:linear-gradient(180deg,var(--peach),var(--yellow));border-radius:3px;animation:audioBar .6s ease-in-out infinite alternate;}
+    .bar:nth-child(1){height:20%;animation-delay:.00s;}.bar:nth-child(2){height:60%;animation-delay:.10s;}.bar:nth-child(3){height:90%;animation-delay:.05s;}.bar:nth-child(4){height:45%;animation-delay:.15s;}.bar:nth-child(5){height:75%;animation-delay:.08s;}.bar:nth-child(6){height:55%;animation-delay:.12s;}.bar:nth-child(7){height:85%;animation-delay:.03s;}.bar:nth-child(8){height:35%;animation-delay:.18s;}.bar:nth-child(9){height:65%;animation-delay:.07s;}.bar:nth-child(10){height:25%;animation-delay:.14s;}.bar:nth-child(11){height:80%;animation-delay:.09s;}.bar:nth-child(12){height:40%;animation-delay:.16s;}
+    .bar.paused{animation:none;height:6px!important;}
+    @keyframes audioBar{from{transform:scaleY(0.4);}to{transform:scaleY(1);}}
+    audio#audioEl{width:100%;accent-color:var(--peach);margin-top:8px;}
+    .audio-status{font-size:12px;color:rgba(255,255,255,.35);margin-top:8px;text-align:center;}
+    .toast{position:fixed;top:22px;left:50%;transform:translateX(-50%) translateY(-90px);z-index:9999;background:var(--deep);color:#fff;padding:13px 22px;border-radius:14px;font-size:13px;font-weight:500;box-shadow:0 8px 32px rgba(0,0,0,.4);transition:transform .4s cubic-bezier(.22,1,.36,1);max-width:90vw;}
+    .toast.show{transform:translateX(-50%) translateY(0);}
+    .toast.info-t{border-left:4px solid var(--peach);}
+    .toast.success-t{border-left:4px solid var(--success);}
+    .toast.error-t{border-left:4px solid var(--error);}
+    .toast.sos-t{border-left:4px solid #ef4444;background:#7f1d1d;}
+    @media(max-width:560px){nav{padding:11px 14px;}.page{padding:18px 12px 50px;}.sh-desc{display:none;}}
+  </style>
+</head>
+<body>
+<div class="bg-canvas"><div class="grid-lines"></div></div>
+<div class="toast" id="toast"></div>
+
+<nav>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <a class="back-btn" href="trustedportal.html">← Back</a>
+    <div class="nav-brand">
+      <div class="nav-logo">🛡️</div>
+      <div class="nav-title">Raahi</div>
+    </div>
+  </div>
+  <div class="status-badge safe" id="statusBadge">
+    <div class="status-dot"></div>
+    <span id="statusText">Monitoring</span>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="identity-card">
+    <div class="id-avatar" id="idAvatar">👤</div>
+    <div>
+      <div class="id-name" id="idName">Loading…</div>
+      <div class="id-meta">📱 <span id="idMobile">—</span> &nbsp;·&nbsp; 📍 <span id="idLocation">—</span></div>
+    </div>
+  </div>
+
+  <div class="safe-screen" id="safeScreen">
+    <div class="safe-icon-wrap">🛡️</div>
+    <div class="safe-title" id="safeTitle">All Clear — User is Safe</div>
+    <p class="safe-sub">
+      Monitoring <strong id="safeUserName">this user</strong> in real-time.<br>
+      Their live camera, audio and GPS location will appear the moment they trigger an emergency.
+    </p>
+    <div class="waiting-bar">
+      <div class="waiting-ring"></div>
+      <div class="waiting-text">Checking for emergency every 2 seconds…</div>
+    </div>
+  </div>
+
+  <div class="resolved-banner" id="resolvedBanner">
+    <div class="resolved-icon">✅</div>
+    <div>
+      <div class="resolved-title">Emergency Resolved — User is Safe</div>
+      <div class="resolved-meta" id="resolvedMeta">User confirmed they are safe</div>
+    </div>
+  </div>
+
+  <div class="emg-banner" id="emgBanner">
+    <div class="emg-pulse">🚨</div>
+    <div>
+      <div class="emg-title" id="emgTitle">SOS Alert</div>
+      <div class="emg-meta" id="emgMeta">Emergency active</div>
+    </div>
+    <div class="emg-timer">
+      <div class="emg-time-val" id="timer">00:00</div>
+      <div class="emg-time-lbl">Duration</div>
+    </div>
+  </div>
+
+  <div class="live-sections" id="liveSections">
+
+    <!-- LOCATION — GPS from user's device via backend -->
+    <div class="stream-section">
+      <div class="section-header open" id="hdr-loc" onclick="toggleSection('loc')">
+        <div class="sh-icon loc">📍</div>
+        <div><div class="sh-title">Live Location</div><div class="sh-desc">User's GPS — updating every 5 seconds</div></div>
+        <span class="sh-badge live" id="locBadge">Live</span>
+        <div class="sh-arrow">›</div>
+      </div>
+      <div class="panel-content open" id="pnl-loc">
+        <div id="map"></div>
+        <div class="gps-status-row">
+          <div class="gps-pill waiting" id="gpsPill"><div class="gps-pill-dot"></div><span id="gpsPillText">Acquiring…</span></div>
+          <span class="update-stamp" id="updateStamp">—</span>
+        </div>
+        <div class="map-info">
+          <span style="font-size:15px">📌</span>
+          <span id="latLngDisplay" style="font-size:12px;color:rgba(255,255,255,.55)">Waiting for GPS…</span>
+        </div>
+        <button class="map-btn" onclick="centerMap()">⊕ Re-center</button>
+      </div>
+    </div>
+
+    <!-- CAMERA — user's real camera via WebRTC -->
+    <div class="stream-section">
+      <div class="section-header open" id="hdr-cam" onclick="toggleSection('cam')">
+        <div class="sh-icon cam">📹</div>
+        <div><div class="sh-title">Live Camera</div><div class="sh-desc">User's real camera — streamed via WebRTC</div></div>
+        <span class="sh-badge loading" id="camBadge">Connecting…</span>
+        <div class="sh-arrow">›</div>
+      </div>
+      <div class="panel-content open" id="pnl-cam">
+        <div class="video-placeholder" id="videoPlaceholder">
+          <div class="icon">📹</div>
+          <p>Connecting to user's live camera…<br>
+          <span style="font-size:11px;opacity:.5">Stream arrives via WebRTC from user's device</span></p>
+        </div>
+        <!-- User's camera stream from WebRTC — NOT this device's camera -->
+        <video id="videoFeed" autoplay playsinline style="display:none;"></video>
+        <div class="cam-status-row">
+          <div class="cam-dot" id="camDot"></div>
+          <span id="camStatusText">Requesting stream from user's device…</span>
+        </div>
+        <div class="cam-controls">
+          <button class="cam-btn" onclick="toggleMute()">🔇 Mute / Unmute</button>
+          <button class="cam-btn" onclick="snapshot()">📸 Snapshot</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AUDIO — user's mic via same WebRTC stream -->
+    <div class="stream-section">
+      <div class="section-header open" id="hdr-aud" onclick="toggleSection('aud')">
+        <div class="sh-icon aud">🎤</div>
+        <div><div class="sh-title">Live Audio</div><div class="sh-desc">User's microphone — same WebRTC stream</div></div>
+        <span class="sh-badge loading" id="audBadge">Connecting…</span>
+        <div class="sh-arrow">›</div>
+      </div>
+      <div class="panel-content open" id="pnl-aud">
+        <div class="audio-wrapper">
+          <div class="audio-viz" id="audioViz">
+            <div class="bar paused"></div><div class="bar paused"></div><div class="bar paused"></div>
+            <div class="bar paused"></div><div class="bar paused"></div><div class="bar paused"></div>
+            <div class="bar paused"></div><div class="bar paused"></div><div class="bar paused"></div>
+            <div class="bar paused"></div><div class="bar paused"></div><div class="bar paused"></div>
+          </div>
+          <!-- Plays user's mic audio from WebRTC — NOT this device's mic -->
+          <audio id="audioEl" autoplay controls></audio>
+          <div class="audio-status" id="audioStatus">Waiting for user's audio stream…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const API    = 'http://localhost:8085/api';
+const WS_URL = 'http://localhost:8085/ws';
+  // Data passed from trustedportal.html
+  let streamData = null;
+  try { streamData = JSON.parse(localStorage.getItem('raahiStreamData') || 'null'); } catch(e) {}
+  if (!streamData) { window.location.href = 'trustedportal.html'; }
+
+  const { userMobile, userName, userCity, userState, trustedMobile } = streamData;
+
+  let emergencyActive   = false;
+  let emergencyResolved = false;
+  let timerInterval     = null;
+  let timerSeconds      = 0;
+  let currentAlertId    = streamData.alertId || null;
+  let muted             = false;
+
+  // WebRTC — receives USER's camera + audio (never opens this device's camera)
+  let stompClient      = null;
+  let peerConnection   = null;
+  let pendingIce       = []; // buffer ICE before offer arrives
+
+  // Map
+  let map = null, marker = null, accuracyCircle = null;
+  let trailPolyline = null, trailCoords = [], userHasPanned = false;
+
+  // Fill identity card with USER's info
+  document.getElementById('idName').textContent       = userName;
+  document.getElementById('idMobile').textContent     = userMobile;
+  document.getElementById('idLocation').textContent   = [userCity, userState].filter(Boolean).join(', ') || 'Not set';
+  document.getElementById('safeUserName').textContent = userName;
+
+  let _tt = null;
+  function showToast(msg, type='info', dur=3500) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = `toast ${type}-t show`;
+    clearTimeout(_tt); _tt = setTimeout(()=>el.classList.remove('show'), dur);
+  }
+
+  function toggleSection(id) {
+    const hdr = document.getElementById(`hdr-${id}`);
+    const pnl = document.getElementById(`pnl-${id}`);
+    const open = pnl.classList.contains('open');
+    pnl.classList.toggle('open', !open); hdr.classList.toggle('open', !open);
+    if (!open && id==='loc') setTimeout(()=>{ if(map) map.invalidateSize(true); }, 520);
+  }
+
+  /* ══════════════════════════════════════════════
+     POLLING — every 2s checks if emergency started
+     or resolved using BACKEND as source of truth
+  ══════════════════════════════════════════════ */
+  function startPolling() {
+    checkForEmergency();
+    setInterval(()=>{
+      if (!emergencyActive && !emergencyResolved) checkForEmergency();
+      else if (emergencyActive)                   checkForResolution();
+    }, 2000);
+  }
+
+  /* ── Polls backend for active emergency for this user ── */
+  async function checkForEmergency() {
+    try {
+      const res    = await fetch(`${API}/emergency/active/${trustedMobile}`);
+      const data   = await res.json();
+      const alerts = data.data || [];
+      // Find alert belonging to the specific user we are monitoring
+      const alert  = alerts.find(a => a.userMobile === userMobile);
+      if (alert) {
+        currentAlertId = alert.id;
+        await activateEmergency(alert);
+      }
+    } catch(e) {}
+  }
+
+  /* ── Polls backend for resolution + fresh GPS ── */
+  async function checkForResolution() {
+    if (!currentAlertId) return;
+    try {
+      const res  = await fetch(`${API}/emergency/alert/${currentAlertId}`);
+      const data = await res.json();
+      if (!data.success) return;
+
+      const alert = data.data;
+
+      // Check if resolved
+      if (alert.status === 'RESOLVED') {
+        resolveEmergency(); return;
+      }
+
+      // Update GPS from backend — this is the USER's real location
+      if (alert.latitude && alert.longitude) {
+        updateMap(alert.latitude, alert.longitude);
+      }
+    } catch(e) {}
+  }
+
+  /* ══════════════════════════════════════════════
+     ACTIVATE EMERGENCY
+     - Updates UI to SOS mode
+     - Connects WebSocket
+     - Sends "request-offer" to user's calc.html
+       → calc.html will send WebRTC offer back
+       → we receive user's real camera + audio
+  ══════════════════════════════════════════════ */
+  async function activateEmergency(alert) {
+    if (emergencyActive) return;
+    emergencyActive = true;
+
+    // Update nav badge
+    document.getElementById('statusBadge').className = 'status-badge sos';
+    document.getElementById('statusText').textContent = 'SOS Active';
+    document.getElementById('idAvatar').textContent = '🚨';
+
+    // Show emergency UI
+    document.getElementById('safeScreen').style.display = 'none';
+    document.getElementById('resolvedBanner').classList.remove('visible');
+    document.getElementById('emgBanner').classList.add('visible');
+    document.getElementById('liveSections').classList.add('visible');
+    document.getElementById('emgTitle').textContent = '🚨 SOS — ' + userName;
+    document.getElementById('emgMeta').textContent  = '📱 ' + userMobile + '  ·  Emergency active';
+
+    // Start elapsed timer
+    if (alert.triggeredAt)
+      timerSeconds = Math.floor((Date.now() - new Date(alert.triggeredAt).getTime()) / 1000);
+    timerInterval = setInterval(()=>{
+      timerSeconds++;
+      const m = String(Math.floor(timerSeconds/60)).padStart(2,'0');
+      const s = String(timerSeconds%60).padStart(2,'0');
+      const el = document.getElementById('timer');
+      if (el) el.textContent = `${m}:${s}`;
+    }, 1000);
+
+    // Show initial GPS from backend alert record (user's location)
+    if (alert.latitude && alert.longitude) {
+      initMap(alert.latitude, alert.longitude);
+      updateMap(alert.latitude, alert.longitude);
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('🚨 SOS from ' + userName + ' — connecting live stream…', 'sos', 5000);
+
+    // ── KEY STEP: connect WebSocket then request stream from user ──
+    await connectWebSocketAndRequestStream();
+  }
+
+  /* ══════════════════════════════════════════════
+     WEBSOCKET + REQUEST STREAM
+     1. Connect to WebSocket
+     2. Subscribe to signals on OUR mobile
+     3. Send "request-offer" to USER's mobile
+        → calc.html receives this and sends WebRTC offer
+        → we get user's REAL camera + audio
+  ══════════════════════════════════════════════ */
+  async function connectWebSocketAndRequestStream() {
+    return new Promise((resolve) => {
+      if (stompClient && stompClient.connected) {
+        requestOffer(); resolve(); return;
+      }
+      const socket = new SockJS(WS_URL);
+      stompClient  = Stomp.over(socket);
+      stompClient.debug = null;
+      stompClient.connect({}, () => {
+        // Subscribe to signals sent TO this trusted contact
+        stompClient.subscribe(`/topic/signal/${trustedMobile}`, async (msg) => {
+          await handleIncomingSignal(JSON.parse(msg.body));
+        });
+        console.log('WS connected, subscribed to /topic/signal/' + trustedMobile);
+
+        // Tell calc.html we are ready — it will send a fresh WebRTC offer
+        requestOffer();
+        resolve();
+      }, (err) => { console.warn('WS failed:', err); resolve(); });
+    });
+  }
+
+  /* Send "request-offer" to the user's mobile
+     calc.html is subscribed to /topic/signal/{userMobile}
+     and will respond with a fresh WebRTC offer */
+  function requestOffer() {
+    if (!stompClient || !stompClient.connected) return;
+    stompClient.send('/app/signal', {}, JSON.stringify({
+      type:        'request-offer',
+      payload:     '',
+      fromMobile:  trustedMobile,
+      toMobile:    userMobile        // ← sent to USER's calc.html
+    }));
+    console.log('Sent request-offer to user', userMobile);
+  }
+
+  /* ══════════════════════════════════════════════
+     HANDLE INCOMING SIGNAL FROM calc.html
+     We only receive: offer, ice-candidate
+  ══════════════════════════════════════════════ */
+  async function handleIncomingSignal(signal) {
+    // Only accept signals from the user we are monitoring
+    if (signal.fromMobile !== userMobile) return;
+
+    if (signal.type === 'offer') {
+      // Create peer connection — will receive user's camera + audio
+      peerConnection = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      });
+
+      // ── THIS IS WHERE THE USER'S CAMERA + AUDIO ARRIVES ──
+      peerConnection.ontrack = (e) => {
+        console.log('Got remote track from user:', e.track.kind);
+        if (e.streams && e.streams[0]) {
+          displayUserStream(e.streams[0]);
+        }
+      };
+
+      // Send ICE candidates back to user
+      peerConnection.onicecandidate = (e) => {
+        if (e.candidate && stompClient && stompClient.connected) {
+          stompClient.send('/app/signal', {}, JSON.stringify({
+            type:        'ice-candidate',
+            payload:     JSON.stringify(e.candidate),
+            fromMobile:  trustedMobile,
+            toMobile:    userMobile
+          }));
+        }
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        const s = peerConnection.connectionState;
+        console.log('WebRTC state:', s);
+        if (s === 'connected') showToast('📹 Live stream from ' + userName + ' connected!', 'success', 3000);
+        if (s === 'disconnected' || s === 'failed') {
+          document.getElementById('camStatusText').textContent = '⚠️ Stream disconnected — retrying…';
+          // Retry: request a new offer
+          setTimeout(requestOffer, 3000);
+        }
+      };
+
+      // Set remote description from user's offer
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(JSON.parse(signal.payload))
+      );
+
+      // Flush buffered ICE candidates
+      for (const c of pendingIce) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
+      }
+      pendingIce = [];
+
+      // Create and send answer back to user
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      stompClient.send('/app/signal', {}, JSON.stringify({
+        type:        'answer',
+        payload:     JSON.stringify(answer),
+        fromMobile:  trustedMobile,
+        toMobile:    userMobile
+      }));
+      console.log('Sent WebRTC answer to user');
+
+    } else if (signal.type === 'ice-candidate') {
+      const candidate = JSON.parse(signal.payload);
+      if (peerConnection && peerConnection.remoteDescription) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(()=>{});
+      } else {
+        pendingIce.push(candidate); // buffer until offer is set
+      }
+    }
+  }
+
+  /* ══════════════════════════════════════════════
+     DISPLAY USER'S STREAM
+     Shows user's camera in <video> and
+     user's mic in <audio> — NOT this device
+  ══════════════════════════════════════════════ */
+  function displayUserStream(stream) {
+    // Video — user's camera
+    const video = document.getElementById('videoFeed');
+    document.getElementById('videoPlaceholder').style.display = 'none';
+    video.srcObject = stream;
+    video.style.display = 'block';
+    document.getElementById('camDot').className = 'cam-dot live';
+    document.getElementById('camStatusText').textContent = '🔴 Live — ' + userName + '\'s camera';
+    document.getElementById('camBadge').className = 'sh-badge live';
+    document.getElementById('camBadge').textContent = 'Live';
+
+    // Audio — user's mic (same stream)
+    const audioEl = document.getElementById('audioEl');
+    audioEl.srcObject = stream;
+    document.getElementById('audioStatus').textContent = '🎤 Live audio from ' + userName + '\'s environment';
+    document.getElementById('audBadge').className = 'sh-badge live';
+    document.getElementById('audBadge').textContent = 'Live';
+    document.querySelectorAll('#audioViz .bar').forEach(b => b.classList.remove('paused'));
+  }
+
+  /* ══════════════════════════════════
+     RESOLVE EMERGENCY
+  ══════════════════════════════════ */
+  function resolveEmergency() {
+    if (!emergencyActive || emergencyResolved) return;
+    emergencyActive = false; emergencyResolved = true;
+    clearInterval(timerInterval);
+
+    // Close WebRTC + WebSocket
+    if (peerConnection) { peerConnection.close(); peerConnection = null; }
+    if (stompClient && stompClient.connected) stompClient.disconnect();
+
+    // Stop video/audio display
+    const video = document.getElementById('videoFeed');
+    if (video.srcObject) { video.srcObject.getTracks().forEach(t=>t.stop()); video.srcObject = null; }
+
+    // Update UI
+    document.getElementById('statusBadge').className = 'status-badge safe';
+    document.getElementById('statusText').textContent = 'Safe';
+    document.getElementById('idAvatar').textContent = '✅';
+    document.getElementById('emgBanner').classList.remove('visible');
+    document.getElementById('liveSections').classList.remove('visible');
+    document.getElementById('resolvedBanner').classList.add('visible');
+    document.getElementById('resolvedMeta').textContent =
+      `${userName} confirmed they are safe · ${new Date().toLocaleTimeString()}`;
+    document.getElementById('safeScreen').style.display = 'block';
+    document.getElementById('safeTitle').textContent = '✅ Emergency Resolved — User is Safe';
+    ['cam','aud','loc'].forEach(id=>{
+      const b = document.getElementById(id+'Badge'); b.className='sh-badge ended'; b.textContent='Ended';
+    });
+    document.getElementById('camDot').className = 'cam-dot ended';
+    document.getElementById('camStatusText').textContent = '✅ Stream ended — user is safe';
+    document.getElementById('audioStatus').textContent   = '✅ Audio ended — user is safe';
+    document.getElementById('gpsPill').className = 'gps-pill ended';
+    document.getElementById('gpsPillText').textContent = 'Tracking stopped';
+    document.querySelectorAll('#audioViz .bar').forEach(b=>b.classList.add('paused'));
+    window.scrollTo({ top:0, behavior:'smooth' });
+    showToast('✅ ' + userName + ' is safe — emergency resolved', 'success', 6000);
+  }
+
+  /* ══════════════════════════════════ MAP ══════════════════════════════════ */
+  function initMap(lat, lng) {
+    if (map) return;
+    map = L.map('map', { zoomControl:true }).setView([lat,lng], 16);
+    setTimeout(()=>map.invalidateSize(true), 100);
+    const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      { attribution:'Tiles © Esri', maxZoom:19 });
+    const osm  = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { attribution:'© OpenStreetMap', maxZoom:19 });
+    esri.addTo(map);
+    esri.on('tileerror', ()=>{ map.removeLayer(esri); osm.addTo(map); });
+    L.control.layers({'Street':esri,'OpenStreetMap':osm},null,{position:'topright',collapsed:true}).addTo(map);
+    const icon = L.divIcon({
+      html:`<div style="position:relative;width:28px;height:28px;">
+        <div style="position:absolute;inset:0;border-radius:50%;background:rgba(255,100,60,.35);animation:ripple 1.8s ease-out infinite;"></div>
+        <div style="position:absolute;top:50%;left:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:linear-gradient(135deg,#ff6c3c,#FFAB76);border:2.5px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.5);"></div>
+      </div><style>@keyframes ripple{0%{transform:scale(.6);opacity:.9;}100%{transform:scale(2.2);opacity:0;}}</style>`,
+      iconSize:[28,28], iconAnchor:[14,14], className:''
+    });
+    marker = L.marker([lat,lng],{icon,zIndexOffset:1000}).addTo(map);
+    marker.bindPopup(`<b>📍 ${userName}</b><br>Emergency active`).openPopup();
+    accuracyCircle = L.circle([lat,lng],{radius:40,color:'#ff6c3c',fillColor:'#ff6c3c',fillOpacity:.08,weight:1.5,dashArray:'5 5'}).addTo(map);
+    trailPolyline  = L.polyline([],{color:'#FFAB76',weight:3,opacity:.7,dashArray:'7 5'}).addTo(map);
+    map.on('dragstart',()=>{ userHasPanned=true; });
+  }
+
+  function updateMap(lat, lng) {
+    if (!map) { initMap(lat,lng); return; }
+    const pos=[lat,lng];
+    marker.setLatLng(pos); accuracyCircle.setLatLng(pos);
+    trailCoords.push(pos); trailPolyline.setLatLngs(trailCoords);
+    if (!userHasPanned) map.setView(pos,16,{animate:true,duration:.7});
+    document.getElementById('latLngDisplay').innerHTML =
+      `<span class="coord-val">${lat.toFixed(6)}° N</span>, <span class="coord-val">${lng.toFixed(6)}° E</span>`;
+    document.getElementById('updateStamp').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+    document.getElementById('gpsPill').className = 'gps-pill tracking';
+    document.getElementById('gpsPillText').textContent = 'Live GPS';
+  }
+
+  function centerMap() {
+    if (marker) { map.panTo(marker.getLatLng(),{animate:true}); userHasPanned=false; }
+  }
+
+  function toggleMute() {
+    const v=document.getElementById('videoFeed'); muted=!muted; v.muted=muted;
+    showToast(muted?'🔇 Muted':'🔊 Unmuted','info');
+  }
+
+  function snapshot() {
+    const v=document.getElementById('videoFeed');
+    if (!v.srcObject) { showToast('⚠️ No active video stream','error'); return; }
+    const cv=document.createElement('canvas');
+    cv.width=v.videoWidth; cv.height=v.videoHeight;
+    cv.getContext('2d').drawImage(v,0,0);
+    const a=document.createElement('a');
+    a.download=`${userName.replace(/ /g,'_')}_snapshot.jpg`;
+    a.href=cv.toDataURL('image/jpeg',.9); a.click();
+    showToast('📸 Snapshot saved','success');
+  }
+
+  window.addEventListener('load', startPolling);
+</script>
+</body>
+</html>

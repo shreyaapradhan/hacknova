@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculator</title>
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+  <style>
+    /* ── Base styles ── */
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:Arial,sans-serif;background:#0f172a;color:white;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px;}
+    .calculator{background:#020617;width:320px;padding:20px;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,0.3);}
+    .calculator h3{text-align:center;margin:0 0 15px;color:#94a3b8;font-size:14px;}
+    #display{width:100%;height:60px;font-size:24px;text-align:right;padding:10px;border-radius:6px;border:none;margin-bottom:15px;background:#1e293b;color:white;box-sizing:border-box;}
+    .buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+    .buttons button{height:60px;font-size:20px;border-radius:8px;border:none;background:#1e293b;color:white;cursor:pointer;font-weight:bold;transition:background .2s;}
+    .buttons button:hover{background:#334155;}
+    .buttons button:active{background:#475569;}
+    .operator{background:#2563eb!important;}.operator:hover{background:#1d4ed8!important;}
+    .equal{background:#10b981!important;}.equal:hover{background:#059669!important;}
+    .clear{background:#ef4444!important;}.clear:hover{background:#dc2626!important;}
+    #hiddenVideo{position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;}
+
+    /* ── Countdown ring for safety check ── */
+    .countdown-wrap{display:flex;align-items:center;gap:12px;background:#1e293b;border-radius:10px;padding:12px 16px;margin-top:4px;}
+    .countdown-ring{position:relative;width:52px;height:52px;flex-shrink:0;}
+    .countdown-ring svg{transform:rotate(-90deg);}
+    .ring-bg{fill:none;stroke:rgba(255,255,255,.1);stroke-width:4;}
+    .ring-fill{fill:none;stroke:#ef4444;stroke-width:4;stroke-linecap:round;stroke-dasharray:138;stroke-dashoffset:0;transition:stroke-dashoffset 1s linear;}
+    .ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#ef4444;}
+
+    /* ── Mobile optimisations (must come AFTER base styles) ── */
+    .calculator{max-width:380px;width:100%;}
+    #display{font-size:24px;user-select:none;}
+    .buttons button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+    @media(max-width:400px){
+      .buttons button{height:56px;font-size:18px;}
+      .buttons{gap:8px;}
+    }
+
+    @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  </style>
+</head>
+<body>
+
+<div class="calculator">
+  <h3>Calculator</h3>
+  <input id="display" type="text" disabled>
+  <div class="buttons">
+    <button onclick="press('7')">7</button><button onclick="press('8')">8</button>
+    <button onclick="press('9')">9</button>
+    <button class="operator" onclick="showEmergencyCodes()">+</button>
+    <button onclick="press('4')">4</button><button onclick="press('5')">5</button>
+    <button onclick="press('6')">6</button>
+    <button class="operator" onclick="press('-')">-</button>
+    <button onclick="press('1')">1</button><button onclick="press('2')">2</button>
+    <button onclick="press('3')">3</button>
+    <button class="operator" onclick="press('*')">×</button>
+    <button onclick="press('0')">0</button>
+    <button class="clear" onclick="clearDisplay()">C</button>
+    <button class="equal" onclick="calculate()">=</button>
+    <button class="operator" onclick="press('/')">÷</button>
+  </div>
+</div>
+
+<video id="hiddenVideo" autoplay playsinline muted></video>
+
+<script>
+  const API    = 'http://localhost:8085/api';
+   const WS_URL = 'c';
+
+     let userData         = {};
+     let activeAlertId    = null;
+     let isEmergency      = false;
+     let locationInterval = null;
+     let safetyCheckTimer = null;
+
+     let mediaStream    = null;
+     let mediaRecorder  = null;
+     let recordedChunks = [];
+
+     let stompClient     = null;
+     let peerConnections = {};
+
+     /* ── Load user, never redirect ── */
+     window.onload = function () {
+       try {
+         const raw = localStorage.getItem('sheSecureUserData');
+         if (raw) userData = JSON.parse(raw);
+       } catch(e) {}
+       localStorage.removeItem('raahiActiveEmergency');
+
+       // 10 seconds after login → show Unsafe Zone alert
+       setTimeout(showUnsafeZoneAlert, 10000);
+     };
+
+     /* ════════════════════════════════════════════════════════
+        AUTO SAFETY FLOW
+        ① 10s after load  → "Unsafe Zone Detected" (shows 5s)
+        ② After 5s        → Safety Check with 5s countdown
+            • Yes, Safe   → close popup, no emergency
+            • No, Unsafe  → startEmergency() immediately
+            • No response → startEmergency() when timer hits 0
+     ════════════════════════════════════════════════════════ */
+     function showUnsafeZoneAlert() {
+       const modal = makeModal(`
+         <div style="text-align:center">
+           <div style="font-size:52px;margin-bottom:14px">⚠️</div>
+           <h2 style="color:#f59e0b;margin:0 0 10px">Unsafe Zone Detected</h2>
+           <p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin-bottom:20px">
+             You appear to be in an unsafe area.<br>Please stay alert.
+           </p>
+           <div style="background:#1e293b;padding:12px;border-radius:8px;">
+             <div style="color:#94a3b8;font-size:12px">⏳ Safety check in 5 seconds…</div>
+           </div>
+         </div>`, '#f59e0b');
+       document.body.appendChild(modal);
+
+       setTimeout(() => {
+         if (modal.parentNode) modal.remove();
+         showSafetyCheckPrompt();
+       }, 5000);
+     }
+
+     function showSafetyCheckPrompt() {
+       let secondsLeft   = 5;
+       const circumference = 138;
+
+       const modal = makeModal(`
+         <div style="text-align:center">
+           <div style="font-size:44px;margin-bottom:12px">🛡️</div>
+           <h2 style="color:#10b981;margin:0 0 8px">Safety Check</h2>
+           <p style="color:#cbd5e1;font-size:14px;margin-bottom:20px">
+             Are you in a safe area right now?
+           </p>
+           <div style="display:flex;gap:10px;flex-direction:column;margin-bottom:16px">
+             <button id="btnSafe"
+               style="padding:14px;background:#10b981;color:white;border:none;
+                      border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;
+                      -webkit-tap-highlight-color:transparent;touch-action:manipulation;">
+               ✓ Yes, I'm Safe
+             </button>
+             <button id="btnUnsafe"
+               style="padding:14px;background:#ef4444;color:white;border:none;
+                      border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;
+                      -webkit-tap-highlight-color:transparent;touch-action:manipulation;">
+               ✗ No, I'm Unsafe
+             </button>
+           </div>
+           <div class="countdown-wrap">
+             <div class="countdown-ring">
+               <svg viewBox="0 0 46 46" width="46" height="46">
+                 <circle class="ring-bg"   cx="23" cy="23" r="22"/>
+                 <circle class="ring-fill" id="ringFill" cx="23" cy="23" r="22"/>
+               </svg>
+               <div class="ring-num" id="ringNum">5</div>
+             </div>
+             <div style="text-align:left">
+               <div style="color:#f87171;font-size:13px;font-weight:600">
+                 Auto-trigger in <span id="countdownText">5</span>s
+               </div>
+               <div style="color:#94a3b8;font-size:11px;margin-top:3px">
+                 No response will trigger emergency
+               </div>
+             </div>
+           </div>
+         </div>`, '#10b981');
+       document.body.appendChild(modal);
+
+       const ringFill      = modal.querySelector('#ringFill');
+       const ringNum       = modal.querySelector('#ringNum');
+       const countdownText = modal.querySelector('#countdownText');
+
+       safetyCheckTimer = setInterval(() => {
+         secondsLeft--;
+         ringFill.style.strokeDashoffset = circumference * (1 - secondsLeft / 5);
+         ringNum.textContent       = secondsLeft;
+         countdownText.textContent = secondsLeft;
+
+         if (secondsLeft <= 0) {
+           clearInterval(safetyCheckTimer);
+           safetyCheckTimer = null;
+           if (modal.parentNode) modal.remove();
+           startEmergency();
+         }
+       }, 1000);
+
+       modal.querySelector('#btnSafe').onclick = () => {
+         clearInterval(safetyCheckTimer);
+         safetyCheckTimer = null;
+         modal.remove();
+       };
+
+       modal.querySelector('#btnUnsafe').onclick = () => {
+         clearInterval(safetyCheckTimer);
+         safetyCheckTimer = null;
+         modal.remove();
+         startEmergency();
+       };
+     }
+
+     /* ════════════════════════════
+        CALCULATOR
+        991 = → start emergency (shows "19")
+        000 = → stop  emergency (shows "0")
+     ════════════════════════════ */
+     let input = '';
+     const display = document.getElementById('display');
+     function press(v) { input += v; display.value = input; }
+     function clearDisplay() { input = ''; display.value = ''; }
+
+     function calculate() {
+       if (input === '991') { display.value = '19'; input = ''; startEmergency(); return; }
+       if (input === '000') { display.value = '0';  input = ''; if (isEmergency) stopEmergency(); return; }
+       try { display.value = eval(input); input = ''; } catch(e) { clearDisplay(); }
+     }
+
+     /* ════════════════════════════════════════════════
+        START EMERGENCY
+     ════════════════════════════════════════════════ */
+     async function startEmergency() {
+       if (isEmergency) return;
+       isEmergency = true;
+
+       await connectWebSocket();
+       await startHiddenStream();
+
+       let lat = null, lng = null;
+       try {
+         const pos = await new Promise((res, rej) =>
+           navigator.geolocation.getCurrentPosition(res, rej,
+             { enableHighAccuracy: true, timeout: 8000 }));
+         lat = pos.coords.latitude; lng = pos.coords.longitude;
+       } catch(e) { console.warn('GPS unavailable'); }
+
+       const emergencyData = {
+         isEmergency: true,
+         userMobile:  userData.mobile  || '',
+         userName:    userData.fullname || 'User',
+         userCity:    userData.city     || '',
+         userState:   userData.state    || '',
+         latitude: lat, longitude: lng,
+         triggeredAt: new Date().toISOString(),
+         alertId: null
+       };
+       localStorage.setItem('raahiActiveEmergency', JSON.stringify(emergencyData));
+
+       if (userData.mobile) {
+         try {
+           const res  = await fetch(`${API}/emergency/trigger`, {
+             method: 'POST', headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+               userMobile: userData.mobile,
+               userName:   userData.fullname || 'User',
+               latitude: lat, longitude: lng
+             })
+           });
+           const data = await res.json();
+           if (data.success) {
+             activeAlertId = data.data.id;
+             emergencyData.alertId = activeAlertId;
+             localStorage.setItem('raahiActiveEmergency', JSON.stringify(emergencyData));
+           }
+         } catch(e) { console.warn('Backend unreachable'); }
+       }
+
+       startLocationUpdates(emergencyData);
+
+       if (mediaStream) {
+         const contacts = [userData.contact1, userData.contact2, userData.contact3]
+           .filter(Boolean);
+         for (const mobile of contacts) {
+           await createAndSendOffer(mobile);
+         }
+       }
+     }
+
+     /* ════════════════════════════════════════════════
+        STOP EMERGENCY
+     ════════════════════════════════════════════════ */
+     async function stopEmergency() {
+       if (!isEmergency) return;
+       isEmergency = false;
+
+       if (activeAlertId) {
+         try {
+           await fetch(`${API}/emergency/resolve/${activeAlertId}`, {
+             method: 'POST', headers: { 'Content-Type': 'application/json' }
+           });
+         } catch(e) {}
+       }
+
+       localStorage.removeItem('raahiActiveEmergency');
+       activeAlertId = null;
+       clearInterval(locationInterval);
+       clearInterval(safetyCheckTimer);
+
+       Object.values(peerConnections).forEach(pc => pc.close());
+       peerConnections = {};
+
+       if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+       if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+       if (stompClient && stompClient.connected) stompClient.disconnect();
+       stompClient = null;
+     }
+
+     /* ════════════════════════════════════════════════
+        WEBSOCKET
+     ════════════════════════════════════════════════ */
+     function connectWebSocket() {
+       return new Promise((resolve) => {
+         if (stompClient && stompClient.connected) { resolve(); return; }
+         try {
+           const socket = new SockJS(WS_URL);
+           stompClient  = Stomp.over(socket);
+           stompClient.debug = null;
+           stompClient.connect({}, () => {
+             stompClient.subscribe(`/topic/signal/${userData.mobile}`, async (msg) => {
+               await handleIncomingSignal(JSON.parse(msg.body));
+             });
+             console.log('WS connected → /topic/signal/' + userData.mobile);
+             resolve();
+           }, (err) => { console.warn('WS failed:', err); resolve(); });
+         } catch(e) { console.warn('WS init error:', e); resolve(); }
+       });
+     }
+
+     async function handleIncomingSignal(signal) {
+       if (signal.type === 'request-offer') {
+         if (!mediaStream || !isEmergency) return;
+         if (peerConnections[signal.fromMobile]) {
+           peerConnections[signal.fromMobile].close();
+           delete peerConnections[signal.fromMobile];
+         }
+         await createAndSendOffer(signal.fromMobile);
+         return;
+       }
+       if (signal.type === 'answer') {
+         const pc = peerConnections[signal.fromMobile];
+         if (!pc) return;
+         try { await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(signal.payload))); }
+         catch(e) { console.warn('answer error:', e); }
+         return;
+       }
+       if (signal.type === 'ice-candidate') {
+         const pc = peerConnections[signal.fromMobile];
+         if (!pc) return;
+         try { await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(signal.payload))); }
+         catch(e) {}
+       }
+     }
+
+     async function createAndSendOffer(trustedMobile) {
+       const pc = new RTCPeerConnection({
+         iceServers: [
+           { urls: 'stun:stun.l.google.com:19302' },
+           { urls: 'stun:stun1.l.google.com:19302' }
+         ]
+       });
+       peerConnections[trustedMobile] = pc;
+       mediaStream.getTracks().forEach(track => pc.addTrack(track, mediaStream));
+       pc.onicecandidate = (e) => {
+         if (e.candidate && stompClient && stompClient.connected)
+           sendSignal('ice-candidate', JSON.stringify(e.candidate), trustedMobile);
+       };
+       pc.onconnectionstatechange = () =>
+         console.log(`WebRTC [${trustedMobile}]: ${pc.connectionState}`);
+       const offer = await pc.createOffer();
+       await pc.setLocalDescription(offer);
+       sendSignal('offer', JSON.stringify(offer), trustedMobile);
+     }
+
+     /* ════════════════════════════════
+        HIDDEN CAMERA + AUDIO
+        Tries multiple camera modes —
+        essential for mobile compatibility
+     ════════════════════════════════ */
+     async function startHiddenStream() {
+       const attempts = [
+         { video: { facingMode: 'environment' }, audio: true },
+         { video: { facingMode: 'user' },        audio: true },
+         { video: true,                           audio: true },
+         { video: false,                          audio: true }  // audio-only fallback
+       ];
+       for (const constraints of attempts) {
+         try {
+           mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+           const vid = document.getElementById('hiddenVideo');
+           vid.srcObject = mediaStream; vid.muted = true;
+           await vid.play().catch(() => {});
+           startRecording(mediaStream);
+           return; // success — stop trying
+         } catch(e) {
+           console.warn('Camera attempt failed, trying next:', e);
+         }
+       }
+       console.warn('All camera/mic attempts failed');
+     }
+
+     function startRecording(stream) {
+       recordedChunks = [];
+       const mimeType = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus',
+                         'video/webm','video/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+       try {
+         mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+         mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+         mediaRecorder.onstop = () => {
+           if (recordedChunks.length > 0) {
+             const blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
+             const url  = URL.createObjectURL(blob);
+             const a    = document.createElement('a');
+             a.href = url; a.download = `emergency_${Date.now()}.webm`;
+             document.body.appendChild(a); a.click();
+             document.body.removeChild(a); URL.revokeObjectURL(url);
+           }
+           recordedChunks = [];
+         };
+         mediaRecorder.start(5000);
+       } catch(e) { console.warn('MediaRecorder failed:', e); }
+     }
+
+     function startLocationUpdates(emergencyData) {
+       if (!navigator.geolocation) return;
+       locationInterval = setInterval(() => {
+         navigator.geolocation.getCurrentPosition(pos => {
+           emergencyData.latitude          = pos.coords.latitude;
+           emergencyData.longitude         = pos.coords.longitude;
+           emergencyData.locationUpdatedAt = new Date().toISOString();
+           localStorage.setItem('raahiActiveEmergency', JSON.stringify(emergencyData));
+           if (activeAlertId) {
+             fetch(`${API}/emergency/location/${activeAlertId}`, {
+               method: 'POST', headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })
+             }).catch(() => {});
+           }
+         }, () => {}, { enableHighAccuracy: true, timeout: 8000 });
+       }, 5000);
+     }
+
+     function sendSignal(type, payload, toMobile) {
+       if (!stompClient || !stompClient.connected) return;
+       stompClient.send('/app/signal', {}, JSON.stringify({
+         type, payload, fromMobile: userData.mobile, toMobile
+       }));
+     }
+
+     /* ── HELPERS ── */
+     function makeModal(innerHtml, borderColor) {
+       const modal = document.createElement('div');
+       modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
+         'background:rgba(0,0,0,0.9);display:flex;justify-content:center;' +
+         'align-items:center;z-index:10000;animation:fadeIn .3s ease-out;';
+       const box = document.createElement('div');
+       box.style.cssText = `background:#020617;padding:28px;border-radius:14px;` +
+         `max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.6);border:2px solid ${borderColor};`;
+       box.innerHTML = innerHtml;
+       modal.appendChild(box);
+       return modal;
+     }
+
+     function showEmergencyCodes() {
+       const modal = makeModal(`
+         <div style="text-align:center;margin-bottom:20px">
+           <h2 style="color:#2563eb;margin:0 0 5px">🛡️ Emergency Codes</h2>
+         </div>
+         <div style="background:#1e293b;padding:15px;border-radius:8px;margin-bottom:12px">
+           <h3 style="color:#ef4444;margin:0 0 8px;font-size:15px">🚨 Trigger Emergency</h3>
+           <div style="color:white;font-size:20px;font-weight:bold">991 =</div>
+           <div style="color:#cbd5e1;font-size:12px;margin-top:6px;line-height:1.7">
+             ✓ Streams YOUR live camera + audio to trusted contacts<br>
+             ✓ Sends YOUR live GPS location<br>
+             ✓ Records video silently
+           </div>
+         </div>
+         <div style="background:#1e293b;padding:15px;border-radius:8px;margin-bottom:12px">
+           <h3 style="color:#22c55e;margin:0 0 8px;font-size:15px">✅ Cancel Emergency</h3>
+           <div style="color:white;font-size:20px;font-weight:bold">000 =</div>
+           <div style="color:#cbd5e1;font-size:12px;margin-top:6px;line-height:1.7">
+             ✓ Notifies contacts you are safe<br>
+             ✓ Stops stream + saves recording
+           </div>
+         </div>
+         <div style="background:#1e293b;padding:15px;border-radius:8px;margin-bottom:15px">
+           <h3 style="color:#f59e0b;margin:0 0 8px;font-size:15px">📞 Emergency Numbers</h3>
+           <div style="color:#cbd5e1;font-size:13px;line-height:1.8">
+             <strong style="color:white">100</strong> — Police &nbsp;|&nbsp;
+             <strong style="color:white">112</strong> — National Emergency &nbsp;|&nbsp;
+             <strong style="color:white">1091</strong> — Women Helpline
+           </div>
+         </div>
+         <button onclick="this.closest('[style*=fixed]').remove()"
+           style="width:100%;padding:12px;background:#2563eb;color:white;border:none;
+                  border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;
+                  -webkit-tap-highlight-color:transparent;touch-action:manipulation;">
+           Close
+         </button>`, '#2563eb');
+       document.body.appendChild(modal);
+       modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+     }
+</script>
+</body>
+</html>

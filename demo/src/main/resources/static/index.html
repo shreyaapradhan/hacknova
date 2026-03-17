@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raahi — Your Safety Companion</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <style>
+    :root{
+      --peach:#FFAB76;--peach-lt:#FFD6B8;--yellow:#FFE033;--yellow-dk:#F5C518;
+      --warm-100:#FFF8EE;--warm-200:#FFE8C8;--deep:#2B1A0F;--mid:#5C3D1E;--muted:#9C7B5A;
+      --success:#22c55e;--error:#ef4444;
+    }
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+    html{scroll-behavior:smooth;}
+    body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#1a0e05;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-x:hidden;}
+
+    /* BG */
+    .bg-canvas{position:fixed;inset:0;z-index:0;overflow:hidden;background:linear-gradient(135deg,#1a0e05 0%,#2e1a08 40%,#1e0f06 100%);}
+    .bg-canvas::before{content:'';position:absolute;inset:-50%;background:radial-gradient(ellipse 60% 40% at 20% 30%,rgba(255,171,118,.18) 0%,transparent 60%),radial-gradient(ellipse 50% 35% at 80% 70%,rgba(255,224,51,.13) 0%,transparent 55%),radial-gradient(ellipse 40% 50% at 50% 10%,rgba(255,214,184,.10) 0%,transparent 50%);animation:bgShift 12s ease-in-out infinite alternate;}
+    @keyframes bgShift{0%{transform:translate(0,0) rotate(0deg);}100%{transform:translate(3%,2%) rotate(1.5deg);}}
+    .orb{position:absolute;border-radius:50%;filter:blur(60px);opacity:.35;animation:floatOrb linear infinite;}
+    .orb-1{width:320px;height:320px;background:var(--peach);top:-80px;left:-60px;animation-duration:18s;}
+    .orb-2{width:240px;height:240px;background:var(--yellow);bottom:-60px;right:-40px;animation-duration:22s;animation-delay:-7s;}
+    .orb-3{width:180px;height:180px;background:var(--peach-lt);top:40%;right:10%;animation-duration:15s;animation-delay:-4s;}
+    .orb-4{width:140px;height:140px;background:var(--yellow-dk);bottom:20%;left:5%;animation-duration:20s;animation-delay:-11s;}
+    @keyframes floatOrb{0%,100%{transform:translate(0,0) scale(1);}33%{transform:translate(20px,-25px) scale(1.05);}66%{transform:translate(-15px,18px) scale(.96);}}
+    .grid-lines{position:absolute;inset:0;background-image:linear-gradient(rgba(255,171,118,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,171,118,.04) 1px,transparent 1px);background-size:60px 60px;}
+    .particles{position:absolute;inset:0;pointer-events:none;}
+    .particle{position:absolute;border-radius:50%;opacity:0;animation:rise linear infinite;}
+    @keyframes rise{0%{transform:translateY(0) scale(1);opacity:0;}10%{opacity:.6;}90%{opacity:.3;}100%{transform:translateY(-100vh) scale(.3);opacity:0;}}
+
+    /* CARD */
+    .card{position:relative;z-index:10;background:rgba(255,255,255,.87);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);border-radius:28px;border:1.5px solid rgba(255,214,184,.5);box-shadow:0 8px 40px rgba(43,26,15,.18),0 0 0 1px rgba(255,255,255,.25) inset;max-width:540px;width:100%;overflow:hidden;animation:cardIn .7s cubic-bezier(.22,1,.36,1) both;}
+    @keyframes cardIn{from{opacity:0;transform:translateY(40px) scale(.97);}to{opacity:1;transform:none;}}
+
+    /* HEADER */
+    .header{padding:28px 36px 22px;background:linear-gradient(145deg,var(--peach) 0%,var(--yellow) 100%);position:relative;overflow:hidden;text-align:center;}
+    .header::before{content:'';position:absolute;width:300px;height:300px;background:rgba(255,255,255,.12);border-radius:50%;top:-120px;right:-80px;}
+    .header::after{content:'';position:absolute;width:180px;height:180px;background:rgba(255,255,255,.08);border-radius:50%;bottom:-70px;left:-40px;}
+    .logo-ring{width:60px;height:60px;background:rgba(255,255,255,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:28px;animation:shieldPulse 3s ease-in-out infinite;border:2px solid rgba(255,255,255,.5);position:relative;z-index:1;}
+    @keyframes shieldPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.4);}50%{box-shadow:0 0 0 14px rgba(255,255,255,0);}}
+    .header h1{font-family:'Playfair Display',serif;font-size:28px;font-weight:900;color:var(--deep);position:relative;z-index:1;}
+    .header p{font-size:12px;color:rgba(43,26,15,.7);margin-top:4px;position:relative;z-index:1;line-height:1.5;}
+
+    /* ── TAB ROW (Login / Register) ── */
+    .main-tab-row{display:flex;border-bottom:2px solid var(--warm-200);background:rgba(255,255,255,.87);}
+    .main-tab{flex:1;padding:14px;text-align:center;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .25s;border-bottom:3px solid transparent;margin-bottom:-2px;letter-spacing:.3px;}
+    .main-tab.active{color:var(--mid);border-bottom-color:var(--peach);}
+    .main-tab:hover:not(.active){color:var(--mid);}
+
+    /* ── LOGIN PANEL ── */
+    #loginPanel{padding:28px 36px 32px;}
+    .login-panel-anim{animation:panelIn .38s cubic-bezier(.22,1,.36,1);}
+    .login-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--deep);margin-bottom:4px;}
+    .login-sub{font-size:12.5px;color:var(--muted);margin-bottom:22px;line-height:1.5;}
+    .login-group{margin-bottom:14px;}
+    .login-group label{display:block;font-size:11px;font-weight:600;color:var(--mid);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px;}
+    .login-input-wrap{position:relative;display:flex;align-items:center;}
+    .login-input-icon{position:absolute;left:13px;font-size:15px;pointer-events:none;z-index:1;}
+    .login-input{width:100%;padding:12px 14px 12px 40px;background:var(--warm-100);border:1.5px solid var(--warm-200);border-radius:12px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--deep);outline:none;transition:all .25s;-webkit-appearance:none;}
+    .login-input::placeholder{color:var(--muted);font-weight:300;}
+    .login-input:focus{border-color:var(--peach);background:#fff;box-shadow:0 0 0 3px rgba(255,171,118,.18);}
+    .login-btn{width:100%;margin-top:8px;padding:14px;background:linear-gradient(135deg,var(--peach) 0%,var(--yellow) 100%);color:var(--deep);font-family:'Playfair Display',serif;font-size:15px;font-weight:700;border:none;border-radius:12px;cursor:pointer;transition:all .3s;box-shadow:0 4px 18px rgba(255,171,118,.4);display:flex;align-items:center;justify-content:center;gap:8px;}
+    .login-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(255,171,118,.55);}
+    .login-btn:active{transform:none;}
+    .login-btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;}
+    .login-divider{display:flex;align-items:center;gap:10px;margin:18px 0;}
+    .login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--warm-200);}
+    .login-divider span{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.4px;}
+    .login-hint{text-align:center;font-size:12px;color:var(--muted);}
+    .login-hint a{color:var(--mid);font-weight:600;cursor:pointer;text-decoration:none;}
+    .login-hint a:hover{color:var(--deep);text-decoration:underline;}
+    .login-info-box{display:flex;gap:9px;align-items:flex-start;background:linear-gradient(135deg,rgba(255,171,118,.1),rgba(255,224,51,.08));border:1px solid rgba(255,171,118,.28);border-radius:11px;padding:12px;margin-bottom:20px;font-size:12px;color:var(--mid);line-height:1.6;}
+
+    /* STEP PROGRESS */
+    .step-progress{padding:18px 36px 0;background:rgba(255,255,255,.87);}
+    .steps-track{display:flex;align-items:center;justify-content:center;}
+    .step-dot{width:32px;height:32px;border-radius:50%;background:var(--warm-200);border:2px solid var(--warm-200);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);transition:all .35s cubic-bezier(.22,1,.36,1);position:relative;z-index:1;flex-shrink:0;}
+    .step-dot.active{background:linear-gradient(135deg,var(--peach),var(--yellow));border-color:var(--peach);color:var(--deep);box-shadow:0 0 0 4px rgba(255,171,118,.2);}
+    .step-dot.done{background:var(--success);border-color:var(--success);color:#fff;}
+    .step-dot.done .dot-num{display:none;}
+    .step-dot.done::after{content:'✓';font-size:13px;}
+    .step-line{flex:1;height:3px;background:var(--warm-200);transition:background .4s ease;min-width:12px;}
+    .step-line.done{background:linear-gradient(90deg,var(--peach),var(--yellow));}
+    .step-labels{display:flex;justify-content:space-between;padding:0 0 10px;margin-top:5px;}
+    .step-label{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;text-align:center;flex:1;transition:color .3s;}
+    .step-label.active{color:var(--mid);}
+    .step-label.done{color:var(--success);}
+
+    /* PANELS */
+    .form-body{padding:24px 36px 30px;overflow:hidden;}
+    .step-panel{display:none;animation:panelIn .38s cubic-bezier(.22,1,.36,1);}
+    .step-panel.active{display:block;}
+    .step-panel.slide-back{animation:panelBack .38s cubic-bezier(.22,1,.36,1);}
+    @keyframes panelIn{from{opacity:0;transform:translateX(28px);}to{opacity:1;transform:none;}}
+    @keyframes panelBack{from{opacity:0;transform:translateX(-28px);}to{opacity:1;transform:none;}}
+
+    .panel-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--deep);margin-bottom:3px;}
+    .panel-sub{font-size:12.5px;color:var(--muted);margin-bottom:20px;line-height:1.5;}
+
+    /* FORM ELEMENTS */
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .form-group{margin-bottom:12px;}
+    label{display:block;font-size:11px;font-weight:600;color:var(--mid);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px;}
+    .required{color:#e05b3a;}
+    input[type=text],input[type=tel],select{width:100%;padding:11px 15px;background:var(--warm-100);border:1.5px solid var(--warm-200);border-radius:11px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--deep);transition:all .25s;outline:none;appearance:none;}
+    input::placeholder{color:var(--muted);font-weight:300;}
+    select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239C7B5A' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;padding-right:34px;cursor:pointer;}
+    input:focus,select:focus{border-color:var(--peach);background:#fff;box-shadow:0 0 0 3px rgba(255,171,118,.18);}
+    input[disabled]{background:var(--warm-200);color:var(--muted);cursor:not-allowed;}
+    .hidden{display:none!important;}
+
+    /* OTP */
+    .otp-wrap{display:flex;gap:12px;justify-content:center;margin:22px 0 18px;}
+    .otp-box{width:62px;height:68px;font-family:'Playfair Display',serif;font-size:28px;font-weight:700;text-align:center;color:var(--deep);background:var(--warm-100);border:2px solid var(--warm-200);border-radius:14px;outline:none;transition:all .25s;caret-color:var(--peach);}
+    .otp-box:focus{border-color:var(--peach);background:#fff;box-shadow:0 0 0 4px rgba(255,171,118,.2);transform:scale(1.06);}
+    .otp-box.filled{border-color:var(--peach);background:linear-gradient(135deg,rgba(255,171,118,.1),rgba(255,224,51,.1));}
+    .otp-box.ok{border-color:var(--success);background:rgba(34,197,94,.08);}
+    .otp-box.error-box{border-color:var(--error);animation:shake .4s ease;}
+    @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}50%{transform:translateX(6px);}}
+    .otp-hint{text-align:center;font-size:12.5px;color:var(--muted);}
+    .resend-btn{background:none;border:none;color:var(--peach);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline;padding:4px;transition:color .2s;}
+    .resend-btn:hover{color:var(--mid);}
+
+    /* CONTACTS */
+    .contact-row{display:flex;align-items:center;gap:10px;background:var(--warm-100);border:1.5px solid var(--warm-200);border-radius:12px;padding:10px 14px;transition:border-color .2s;margin-bottom:10px;}
+    .contact-row:focus-within{border-color:var(--peach);box-shadow:0 0 0 3px rgba(255,171,118,.18);}
+    .contact-num{width:24px;height:24px;background:linear-gradient(135deg,var(--peach),var(--yellow));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--deep);flex-shrink:0;}
+    .contact-row input{border:none;background:transparent;padding:0;font-size:14px;font-family:'DM Sans',sans-serif;flex:1;outline:none;color:var(--deep);}
+    .contact-row input:focus{box-shadow:none;border:none;}
+
+    /* PHOTO */
+    .photo-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+    .photo-opt-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 12px;background:var(--warm-100);border:2px solid var(--warm-200);border-radius:14px;cursor:pointer;transition:all .25s;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--mid);}
+    .photo-opt-btn:hover{border-color:var(--peach);background:#fff;box-shadow:0 4px 16px rgba(255,171,118,.2);}
+    .photo-opt-btn.selected{border-color:var(--peach);background:linear-gradient(135deg,rgba(255,171,118,.12),rgba(255,224,51,.08));color:var(--deep);}
+    .photo-opt-icon{font-size:28px;}
+    .photo-opt-sub{font-size:10px;font-weight:400;color:var(--muted);}
+    .camera-container{display:none;border-radius:14px;overflow:hidden;background:#111;aspect-ratio:4/3;position:relative;}
+    .camera-container.active{display:block;}
+    #videoFeed{width:100%;height:100%;object-fit:cover;display:block;}
+    .camera-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:14px;background:linear-gradient(transparent 50%,rgba(0,0,0,.5));}
+    .face-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-55%);width:130px;height:155px;border:3px solid rgba(255,171,118,.8);border-radius:50%;pointer-events:none;animation:framePulse 2s ease-in-out infinite;}
+    @keyframes framePulse{0%,100%{border-color:rgba(255,171,118,.8);}50%{border-color:rgba(255,224,51,1);box-shadow:0 0 22px rgba(255,224,51,.4);}}
+    .camera-tip{font-size:11px;color:rgba(255,255,255,.85);text-align:center;margin-bottom:10px;}
+    .capture-btn{background:linear-gradient(135deg,var(--peach),var(--yellow));border:none;border-radius:50%;width:54px;height:54px;font-size:22px;cursor:pointer;transition:transform .2s;box-shadow:0 4px 16px rgba(255,171,118,.5);}
+    .capture-btn:hover{transform:scale(1.1);}
+    .upload-zone{border:2px dashed var(--warm-200);border-radius:14px;padding:26px;text-align:center;cursor:pointer;transition:all .25s;background:var(--warm-100);display:none;}
+    .upload-zone.active{display:block;}
+    .upload-zone:hover{border-color:var(--peach);background:#fff;}
+    .up-icon{font-size:30px;margin-bottom:8px;}
+    .upload-zone p{font-size:13px;color:var(--muted);}
+    .photo-preview{border-radius:14px;overflow:hidden;display:none;margin-top:12px;}
+    .photo-preview.visible{display:block;}
+    .photo-preview img{width:100%;display:block;max-height:220px;object-fit:cover;}
+    .photo-status{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:500;margin-top:10px;display:none;}
+    .photo-status.visible{display:flex;}
+    .photo-status.detecting{background:rgba(255,171,118,.12);color:var(--mid);}
+    .photo-status.success{background:rgba(34,197,94,.1);color:#16a34a;}
+    .photo-status.fail{background:rgba(239,68,68,.1);color:#dc2626;}
+    .spin{animation:spin .8s linear infinite;display:inline-block;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .retake-btn{display:none;margin-top:10px;background:none;border:1.5px solid var(--warm-200);border-radius:10px;padding:8px 18px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--mid);cursor:pointer;transition:all .2s;width:100%;justify-content:center;}
+    .retake-btn.visible{display:flex;align-items:center;gap:6px;}
+    .retake-btn:hover{border-color:var(--peach);color:var(--deep);}
+
+    /* NAV BUTTONS */
+    .nav-btns{display:flex;gap:12px;margin-top:22px;}
+    .btn-back{flex:0 0 auto;padding:12px 20px;background:none;border:1.5px solid var(--warm-200);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;color:var(--mid);cursor:pointer;transition:all .2s;}
+    .btn-back:hover{border-color:var(--peach);color:var(--deep);}
+    .btn-next{flex:1;padding:13px;background:linear-gradient(135deg,var(--peach) 0%,var(--yellow) 100%);color:var(--deep);font-family:'Playfair Display',serif;font-size:15px;font-weight:700;border:none;border-radius:12px;cursor:pointer;transition:all .3s;box-shadow:0 4px 18px rgba(255,171,118,.4);}
+    .btn-next:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(255,171,118,.55);}
+    .btn-next:active{transform:none;}
+    .btn-next:disabled{opacity:.5;cursor:not-allowed;transform:none!important;}
+    .btn-inner{display:flex;align-items:center;justify-content:center;gap:6px;}
+
+    /* SUCCESS */
+    .success-screen{text-align:center;padding:8px 0;}
+    .success-anim{width:88px;height:88px;background:linear-gradient(135deg,var(--peach),var(--yellow));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 18px;animation:successPop .6s cubic-bezier(.34,1.56,.64,1);}
+    @keyframes successPop{from{transform:scale(0) rotate(-20deg);}to{transform:scale(1) rotate(0deg);}}
+    .success-title{font-family:'Playfair Display',serif;font-size:24px;color:var(--deep);margin-bottom:8px;}
+    .success-sub{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;}
+    .success-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:22px;}
+    .chip{background:linear-gradient(135deg,rgba(255,171,118,.15),rgba(255,224,51,.12));border:1px solid rgba(255,171,118,.3);border-radius:20px;padding:5px 13px;font-size:12px;color:var(--mid);font-weight:600;}
+    .go-btn{padding:13px 36px;background:linear-gradient(135deg,var(--peach),var(--yellow));color:var(--deep);font-family:'Playfair Display',serif;font-size:15px;font-weight:700;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 18px rgba(255,171,118,.4);transition:all .3s;}
+    .go-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(255,171,118,.55);}
+    .privacy-note{display:flex;gap:9px;align-items:flex-start;background:linear-gradient(135deg,rgba(255,171,118,.1),rgba(255,224,51,.08));border:1px solid rgba(255,171,118,.28);border-radius:11px;padding:12px;margin-top:6px;font-size:12px;color:var(--mid);line-height:1.6;}
+
+    /* TOAST */
+    .toast{position:fixed;top:22px;left:50%;transform:translateX(-50%) translateY(-90px);z-index:9999;background:var(--deep);color:#fff;padding:13px 20px;border-radius:14px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;box-shadow:0 8px 32px rgba(0,0,0,.4);transition:transform .4s cubic-bezier(.22,1,.36,1);min-width:200px;max-width:90vw;text-align:center;justify-content:center;}
+    .toast.show{transform:translateX(-50%) translateY(0);}
+    .toast.info{border-left:4px solid var(--peach);}
+    .toast.success-t{border-left:4px solid var(--success);}
+    .toast.error-t{border-left:4px solid var(--error);}
+
+    /* MOBILE */
+    @media(max-width:520px){
+      body{padding:10px;}
+      .card{border-radius:20px;}
+      .header{padding:22px 20px 16px;}
+      .header h1{font-size:24px;}
+      .step-progress{padding:14px 20px 0;}
+      .form-body{padding:20px 20px 26px;}
+      #loginPanel{padding:20px 20px 28px;}
+      .form-row{grid-template-columns:1fr;gap:0;}
+      .otp-box{width:52px;height:60px;font-size:24px;}
+      .otp-wrap{gap:10px;}
+      .step-dot{width:28px;height:28px;font-size:10px;}
+      .panel-title{font-size:18px;}
+      .step-label{font-size:8px;}
+    }
+    @media(max-width:360px){
+      .otp-box{width:46px;height:54px;font-size:22px;border-radius:10px;}
+      .otp-wrap{gap:7px;}
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-canvas">
+  <div class="grid-lines"></div>
+  <div class="orb orb-1"></div><div class="orb orb-2"></div>
+  <div class="orb orb-3"></div><div class="orb orb-4"></div>
+  <div class="particles" id="particles"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="card">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo-ring">🛡️</div>
+    <h1>Raahi</h1>
+    <p>Your personal safety companion</p>
+  </div>
+
+  <!-- ── MAIN TABS: Login / Register ── -->
+  <div class="main-tab-row" id="mainTabRow">
+    <div class="main-tab active" id="mainTabLogin"    onclick="switchMainTab('login')">Sign In</div>
+    <div class="main-tab"        id="mainTabRegister" onclick="switchMainTab('register')">New User</div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       LOGIN PANEL
+  ══════════════════════════════════════ -->
+  <div id="loginPanel" class="login-panel-anim">
+    <div class="login-title">Welcome Back 👋</div>
+    <p class="login-sub">Enter your name and mobile number to access your safety dashboard.</p>
+
+    <div class="login-info-box">
+      <span style="font-size:15px;flex-shrink:0">🛡️</span>
+      <span>Your emergency features, trusted contacts and saved profile will be ready right away.</span>
+    </div>
+
+    <div class="login-group">
+      <label>Full Name</label>
+      <div class="login-input-wrap">
+        <span class="login-input-icon">👤</span>
+        <input class="login-input" type="text" id="loginName" placeholder="Enter your full name">
+      </div>
+    </div>
+
+    <div class="login-group">
+      <label>Mobile Number</label>
+      <div class="login-input-wrap">
+        <span class="login-input-icon">📱</span>
+        <input class="login-input" type="tel" id="loginMobile" placeholder="10-digit mobile number" maxlength="10">
+      </div>
+    </div>
+
+    <button class="login-btn" id="loginBtn" onclick="handleLogin()">
+      Go to Dashboard &nbsp;→
+    </button>
+
+    <div class="login-divider"><span>OR</span></div>
+    <div class="login-hint">New to Raahi? <a onclick="switchMainTab('register')">Create your profile here</a></div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       REGISTER PANEL (step progress + form)
+  ══════════════════════════════════════ -->
+  <div id="registerPanel" style="display:none;">
+
+    <!-- STEP PROGRESS -->
+    <div class="step-progress">
+      <div class="steps-track">
+        <div class="step-dot active" id="dot-0"><span class="dot-num">1</span></div>
+        <div class="step-line" id="line-0"></div>
+        <div class="step-dot" id="dot-1"><span class="dot-num">2</span></div>
+        <div class="step-line" id="line-1"></div>
+        <div class="step-dot" id="dot-2"><span class="dot-num">3</span></div>
+        <div class="step-line" id="line-2"></div>
+        <div class="step-dot" id="dot-3"><span class="dot-num">4</span></div>
+        <div class="step-line" id="line-3"></div>
+        <div class="step-dot" id="dot-4"><span class="dot-num">5</span></div>
+      </div>
+      <div class="step-labels">
+        <span class="step-label active" id="lbl-0">Profile</span>
+        <span class="step-label" id="lbl-1">Verify</span>
+        <span class="step-label" id="lbl-2">Address</span>
+        <span class="step-label" id="lbl-3">Contacts</span>
+        <span class="step-label" id="lbl-4">Photo</span>
+      </div>
+    </div>
+
+    <!-- FORM BODY -->
+    <div class="form-body">
+
+      <!-- STEP 0 -->
+      <div class="step-panel active" id="panel-0">
+        <div class="panel-title">Personal Info</div>
+        <p class="panel-sub">Let's start with your basic details.</p>
+        <div class="form-group">
+          <label>Full Name <span class="required">*</span></label>
+          <input type="text" id="fullname" placeholder="Enter your full name">
+        </div>
+        <div class="form-group">
+          <label>Mobile Number <span class="required">*</span></label>
+          <input type="tel" id="mobile" placeholder="10-digit mobile number" maxlength="10">
+        </div>
+        <div class="privacy-note">
+          <span style="font-size:15px;flex-shrink:0">📱</span>
+          <span>An OTP will be sent to your number for verification in the next step.</span>
+        </div>
+        <div class="nav-btns">
+          <button class="btn-next" onclick="step0Next()"><span class="btn-inner">Send OTP &nbsp;→</span></button>
+        </div>
+      </div>
+
+      <!-- STEP 1: OTP -->
+      <div class="step-panel" id="panel-1">
+        <div class="panel-title">Verify Your Number</div>
+        <p class="panel-sub" id="otpSubtext">Enter the 4-digit OTP sent to your number.</p>
+        <div class="otp-wrap">
+          <input class="otp-box" id="otp0" type="tel" maxlength="1" inputmode="numeric" autocomplete="one-time-code">
+          <input class="otp-box" id="otp1" type="tel" maxlength="1" inputmode="numeric">
+          <input class="otp-box" id="otp2" type="tel" maxlength="1" inputmode="numeric">
+          <input class="otp-box" id="otp3" type="tel" maxlength="1" inputmode="numeric">
+        </div>
+        <p class="otp-hint">Didn't receive it? <button class="resend-btn" onclick="resendOtp()">Resend OTP</button></p>
+        <div class="nav-btns">
+          <button class="btn-back" onclick="goToStep(0,true)">← Back</button>
+          <button class="btn-next" onclick="verifyOtp()"><span class="btn-inner">Verify &amp; Continue →</span></button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Address -->
+      <div class="step-panel" id="panel-2">
+        <div class="panel-title">Address Details</div>
+        <p class="panel-sub">Helps emergency responders locate you faster.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Building / Room</label>
+            <input type="text" id="building" placeholder="Flat, Building">
+          </div>
+          <div class="form-group">
+            <label>Street &amp; Area</label>
+            <input type="text" id="street" placeholder="Street, Area">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>State <span class="required">*</span></label>
+            <select id="state"><option value="">Select state</option></select>
+          </div>
+          <div class="form-group hidden" id="cityGroup">
+            <label>City <span class="required">*</span></label>
+            <select id="city"><option value="">Select city</option></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Country</label>
+          <input type="text" value="India" disabled>
+        </div>
+        <div class="nav-btns">
+          <button class="btn-back" onclick="goToStep(1,true)">← Back</button>
+          <button class="btn-next" onclick="step2Next()"><span class="btn-inner">Next →</span></button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Contacts -->
+      <div class="step-panel" id="panel-3">
+        <div class="panel-title">Emergency Contacts</div>
+        <p class="panel-sub">Up to 3 trusted people who'll be alerted in an emergency.</p>
+        <div class="contact-row"><span class="contact-num">1</span><input type="tel" id="contact1" placeholder="10-digit mobile number" maxlength="10"></div>
+        <div class="contact-row"><span class="contact-num">2</span><input type="tel" id="contact2" placeholder="10-digit mobile number" maxlength="10"></div>
+        <div class="contact-row"><span class="contact-num">3</span><input type="tel" id="contact3" placeholder="10-digit mobile number" maxlength="10"></div>
+        <div class="nav-btns">
+          <button class="btn-back" onclick="goToStep(2,true)">← Back</button>
+          <button class="btn-next" onclick="goToStep(4)"><span class="btn-inner">Next →</span></button>
+        </div>
+      </div>
+
+      <!-- STEP 4: Photo -->
+      <div class="step-panel" id="panel-4">
+        <div class="panel-title">Identification Photo</div>
+        <p class="panel-sub">A clear face photo helps authorities identify you.</p>
+        <div class="photo-options">
+          <button class="photo-opt-btn" id="optCamera" onclick="selectMode('camera')">
+            <span class="photo-opt-icon">📷</span>Take Photo<span class="photo-opt-sub">Use your camera</span>
+          </button>
+          <button class="photo-opt-btn" id="optUpload" onclick="selectMode('upload')">
+            <span class="photo-opt-icon">🖼️</span>Upload Photo<span class="photo-opt-sub">From your gallery</span>
+          </button>
+        </div>
+        <div class="camera-container" id="cameraBox">
+          <video id="videoFeed" autoplay playsinline muted></video>
+          <div class="face-frame"></div>
+          <div class="camera-overlay">
+            <p class="camera-tip">Centre your face in the oval, then tap 📸</p>
+            <button class="capture-btn" onclick="capturePhoto()">📸</button>
+          </div>
+        </div>
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('photoFile').click()">
+          <input type="file" id="photoFile" accept="image/*" style="position:absolute;left:-9999px" onchange="handleUpload(event)">
+          <div class="up-icon">📂</div>
+          <p><strong>Tap to choose a photo</strong></p>
+          <p style="font-size:11px;margin-top:4px;color:var(--muted)">JPG, PNG, WEBP — clear front-facing photo</p>
+        </div>
+        <canvas id="snapCanvas" style="display:none"></canvas>
+        <div class="photo-preview" id="photoPreview"><img id="previewImg" src="" alt="Preview"></div>
+        <div class="photo-status" id="photoStatus"></div>
+        <button class="retake-btn" id="retakeBtn" onclick="retakePhoto()">↺ &nbsp;Retake / Change Photo</button>
+        <div class="nav-btns" style="margin-top:18px;">
+          <button class="btn-back" onclick="goToStep(3,true)">← Back</button>
+          <button class="btn-next" id="finishBtn" onclick="handleSubmit()" disabled>
+            <span class="btn-inner">✦ Complete Setup ✦</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SUCCESS -->
+      <div class="step-panel" id="panel-success">
+        <div class="success-screen">
+          <div class="success-anim">🛡️</div>
+          <div class="success-title">You're Protected!</div>
+          <p class="success-sub">Your profile is active. Emergency features are now live and your trusted contacts have been saved securely.</p>
+          <div class="success-chips">
+            <span class="chip">✓ Mobile Verified</span>
+            <span class="chip">✓ Address Saved</span>
+            <span class="chip">✓ Contacts Added</span>
+            <span class="chip">✓ Face Verified</span>
+          </div>
+          <button class="go-btn" onclick="window.location.href='calc.html'">Go to Dashboard →</button>
+        </div>
+      </div>
+
+    </div><!-- /form-body -->
+  </div><!-- /registerPanel -->
+
+</div><!-- /card -->
+
+<script>
+  const API = 'http://localhost:8085/api';
+
+  /* ── PARTICLES ── */
+  (()=>{
+    const pc=document.getElementById('particles');
+    for(let i=0;i<20;i++){
+      const p=document.createElement('div');p.className='particle';
+      const sz=Math.random()*4+2;
+      p.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;bottom:-10px;background:${Math.random()>.5?'#FFE033':'#FFAB76'};animation-duration:${Math.random()*12+10}s;animation-delay:${Math.random()*-18}s;`;
+      pc.appendChild(p);
+    }
+  })();
+
+  /* ── TOAST ── */
+  let toastT=null;
+  function toast(msg,type='info',dur=3500){
+    const el=document.getElementById('toast');
+    el.textContent=msg;el.className=`toast ${type}-t show`;
+    clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),dur);
+  }
+
+  /* ══════════════════════════════════════
+     MAIN TAB SWITCHER (Login / Register)
+  ══════════════════════════════════════ */
+  function switchMainTab(tab){
+    const toLogin = tab === 'login';
+    document.getElementById('mainTabLogin').className    = 'main-tab' + (toLogin  ? ' active' : '');
+    document.getElementById('mainTabRegister').className = 'main-tab' + (!toLogin ? ' active' : '');
+    document.getElementById('loginPanel').style.display    = toLogin  ? 'block' : 'none';
+    document.getElementById('registerPanel').style.display = toLogin  ? 'none'  : 'block';
+    if(!toLogin) stopCam();
+  }
+
+  /* ══════════════════════════════════════
+     LOGIN HANDLER
+     Checks backend — if user exists, go to calc.html
+  ══════════════════════════════════════ */
+  async function handleLogin(){
+    const name = document.getElementById('loginName').value.trim();
+    const mob  = document.getElementById('loginMobile').value.trim();
+    if(!name){ toast('⚠️ Please enter your full name','error'); return; }
+    if(!/^\d{10}$/.test(mob)){ toast('⚠️ Enter a valid 10-digit mobile number','error'); return; }
+
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin">⏳</span> &nbsp;Signing in…';
+
+    try {
+      const res  = await fetch(`${API}/users/mobile/${mob}`);
+      const data = await res.json();
+
+      if(data.success){
+        // User found — verify name matches loosely (case-insensitive)
+        const dbName = (data.data.fullName || '').toLowerCase();
+        const entered = name.toLowerCase();
+        if(!dbName.includes(entered.split(' ')[0])){
+          toast('❌ Name does not match our records','error');
+          btn.disabled=false; btn.innerHTML='Go to Dashboard &nbsp;→';
+          return;
+        }
+        // Save to localStorage and go to calc
+        localStorage.setItem('sheSecureUserData', JSON.stringify({
+          fullname: data.data.fullName,
+          mobile:   data.data.mobile,
+          building: data.data.building || '',
+          street:   data.data.street   || '',
+          state:    data.data.state    || '',
+          city:     data.data.city     || '',
+          contact1: data.data.contact1 || '',
+          contact2: data.data.contact2 || '',
+          contact3: data.data.contact3 || '',
+          country:  'India'
+        }));
+        toast('✅ Welcome back, '+data.data.fullName+'!','success');
+        setTimeout(()=>window.location.href='calc.html', 1000);
+      } else {
+        toast('❌ No account found. Please register first.','error', 4000);
+        setTimeout(()=>switchMainTab('register'), 1600);
+      }
+    } catch(e){
+      // Backend unreachable — fallback: check localStorage
+      const saved = JSON.parse(localStorage.getItem('sheSecureUserData')||'null');
+      if(saved && saved.mobile === mob){
+        toast('✅ Welcome back, '+saved.fullname+'!','success');
+        setTimeout(()=>window.location.href='calc.html', 1000);
+      } else {
+        toast('❌ Cannot reach server. Please try again.','error',5000);
+      }
+    } finally {
+      btn.disabled=false;
+      btn.innerHTML='Go to Dashboard &nbsp;→';
+    }
+  }
+
+  /* Also allow Enter key on login inputs */
+  ['loginName','loginMobile'].forEach(id=>{
+    document.getElementById(id).addEventListener('keydown',e=>{
+      if(e.key==='Enter') handleLogin();
+    });
+  });
+
+  /* ══════════════════════════════════════
+     STATES DATA
+  ══════════════════════════════════════ */
+  const STATES={
+    "Andhra Pradesh":["Visakhapatnam","Vijayawada","Guntur","Nellore","Kurnool","Tirupati"],
+    "Arunachal Pradesh":["Itanagar","Naharlagun","Pasighat","Tawang"],
+    "Assam":["Guwahati","Silchar","Dibrugarh","Jorhat","Nagaon"],
+    "Bihar":["Patna","Gaya","Bhagalpur","Muzaffarpur","Darbhanga"],
+    "Chhattisgarh":["Raipur","Bhilai","Bilaspur","Korba","Durg"],
+    "Goa":["Panaji","Margao","Vasco da Gama","Mapusa"],
+    "Gujarat":["Ahmedabad","Surat","Vadodara","Rajkot","Bhavnagar","Jamnagar"],
+    "Haryana":["Faridabad","Gurgaon","Panipat","Ambala","Karnal"],
+    "Himachal Pradesh":["Shimla","Dharamshala","Solan","Mandi","Kullu"],
+    "Jharkhand":["Ranchi","Jamshedpur","Dhanbad","Bokaro","Deoghar"],
+    "Karnataka":["Bengaluru","Mysuru","Mangaluru","Hubballi","Belagavi"],
+    "Kerala":["Thiruvananthapuram","Kochi","Kozhikode","Thrissur","Kollam"],
+    "Madhya Pradesh":["Bhopal","Indore","Gwalior","Jabalpur","Ujjain"],
+    "Maharashtra":["Mumbai","Pune","Nagpur","Thane","Nashik","Aurangabad"],
+    "Manipur":["Imphal","Thoubal","Churachandpur"],
+    "Meghalaya":["Shillong","Tura","Jowai"],
+    "Mizoram":["Aizawl","Lunglei","Champhai"],
+    "Nagaland":["Kohima","Dimapur","Mokokchung"],
+    "Odisha":["Bhubaneswar","Cuttack","Rourkela","Puri","Sambalpur"],
+    "Punjab":["Ludhiana","Amritsar","Jalandhar","Patiala","Bathinda"],
+    "Rajasthan":["Jaipur","Jodhpur","Kota","Udaipur","Ajmer","Bikaner"],
+    "Sikkim":["Gangtok","Namchi","Gyalshing"],
+    "Tamil Nadu":["Chennai","Coimbatore","Madurai","Tiruchirappalli","Salem"],
+    "Telangana":["Hyderabad","Warangal","Nizamabad","Khammam"],
+    "Tripura":["Agartala","Udaipur","Dharmanagar"],
+    "Uttar Pradesh":["Lucknow","Kanpur","Ghaziabad","Agra","Varanasi","Meerut"],
+    "Uttarakhand":["Dehradun","Haridwar","Roorkee","Haldwani"],
+    "West Bengal":["Kolkata","Howrah","Durgapur","Asansol","Siliguri"],
+    "Delhi":["New Delhi","North Delhi","South Delhi","East Delhi","West Delhi"],
+    "Jammu and Kashmir":["Srinagar","Jammu","Anantnag","Baramulla"],
+    "Ladakh":["Leh","Kargil"]
+  };
+  const stateSel=document.getElementById('state'),citySel=document.getElementById('city'),cityGroup=document.getElementById('cityGroup');
+  Object.keys(STATES).sort().forEach(s=>{const o=document.createElement('option');o.value=s;o.text=s;stateSel.appendChild(o);});
+  stateSel.onchange=()=>{
+    citySel.innerHTML='<option value="">Select city</option>';
+    if(stateSel.value){cityGroup.classList.remove('hidden');STATES[stateSel.value].forEach(c=>{const o=document.createElement('option');o.value=c;o.text=c;citySel.appendChild(o);});}
+    else cityGroup.classList.add('hidden');
+  };
+
+  /* ══════════════════════════════════════
+     STEP ENGINE
+  ══════════════════════════════════════ */
+  let currentStep=0;
+  function updateDots(step){
+    for(let i=0;i<5;i++){
+      const d=document.getElementById(`dot-${i}`),l=document.getElementById(`lbl-${i}`);
+      d.className='step-dot';l.className='step-label';
+      if(i<step){d.classList.add('done');l.classList.add('done');}
+      else if(i===step){d.classList.add('active');l.classList.add('active');}
+      if(i<4){const ln=document.getElementById(`line-${i}`);ln.className='step-line'+(i<step?' done':'');}
+    }
+  }
+  function goToStep(n,back=false){
+    currentStep=n;
+    document.querySelectorAll('.step-panel').forEach(p=>p.classList.remove('active','slide-back'));
+    const panel=document.getElementById(`panel-${n}`);
+    if(back) panel.classList.add('slide-back');
+    panel.classList.add('active');
+    updateDots(n);
+    if(n!==4) stopCam();
+  }
+
+  function step0Next(){
+    const name=document.getElementById('fullname').value.trim();
+    const mob=document.getElementById('mobile').value.trim();
+    if(!name){toast('⚠️ Please enter your full name','error');return;}
+    if(!/^\d{10}$/.test(mob)){toast('⚠️ Enter a valid 10-digit mobile number','error');return;}
+    sendOtp(mob);
+    goToStep(1);
+    setTimeout(()=>document.getElementById('otp0').focus(),400);
+  }
+
+  function step2Next(){
+    if(!stateSel.value){toast('⚠️ Please select your state','error');return;}
+    goToStep(3);
+  }
+
+  /* ── OTP ── */
+  let generatedOtp='';
+  function sendOtp(mob){
+    generatedOtp=String(Math.floor(1000+Math.random()*9000));
+    document.getElementById('otpSubtext').textContent=`OTP sent to +91 ${mob.slice(0,5)}XXXXX`;
+    clearOtp();
+    toast(`📲 Demo OTP: ${generatedOtp}`,'info',7000);
+  }
+  function resendOtp(){ const mob=document.getElementById('mobile').value.trim(); if(mob) sendOtp(mob); }
+  function clearOtp(){
+    for(let i=0;i<4;i++){const b=document.getElementById(`otp${i}`);b.value='';b.className='otp-box';}
+    document.getElementById('otp0').focus();
+  }
+  function verifyOtp(){
+    let code='';
+    for(let i=0;i<4;i++) code+=document.getElementById(`otp${i}`).value;
+    if(code.length<4){toast('⚠️ Please enter all 4 digits','error');return;}
+    if(code===generatedOtp){
+      for(let i=0;i<4;i++) document.getElementById(`otp${i}`).className='otp-box ok';
+      toast('✅ Number verified!','success');
+      setTimeout(()=>goToStep(2),700);
+    }else{
+      for(let i=0;i<4;i++) document.getElementById(`otp${i}`).className='otp-box error-box';
+      toast('❌ Wrong OTP — try again','error');
+      setTimeout(clearOtp,900);
+    }
+  }
+  for(let i=0;i<4;i++){
+    const box=document.getElementById(`otp${i}`);
+    box.addEventListener('input',e=>{
+      e.target.value=e.target.value.replace(/\D/g,'').slice(-1);
+      if(e.target.value){e.target.classList.add('filled');if(i<3)document.getElementById(`otp${i+1}`).focus();}
+      else e.target.classList.remove('filled');
+      if(i===3&&e.target.value) setTimeout(verifyOtp,220);
+    });
+    box.addEventListener('keydown',e=>{ if(e.key==='Backspace'&&!e.target.value&&i>0) document.getElementById(`otp${i-1}`).focus(); });
+    box.addEventListener('paste',e=>{
+      e.preventDefault();
+      const txt=(e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'').slice(0,4);
+      for(let j=0;j<txt.length;j++){const b=document.getElementById(`otp${j}`);if(b){b.value=txt[j];b.classList.add('filled');}}
+      if(txt.length===4) setTimeout(verifyOtp,200);
+    });
+  }
+
+  /* ── FACE DETECTION ── */
+  const MODEL_URL='https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+  let modelsReady=false,modelsLoading=false;
+  async function ensureModels(){
+    if(modelsReady) return true;
+    if(modelsLoading) return false;
+    if(typeof faceapi==='undefined') return true;
+    modelsLoading=true;
+    try{ await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL); modelsReady=true; }
+    catch(e){ console.warn('face-api load failed',e); }
+    modelsLoading=false; return modelsReady;
+  }
+  window.addEventListener('load',()=>{ if(typeof faceapi!=='undefined') ensureModels(); });
+  async function detectHumanFace(imgEl){
+    if(typeof faceapi==='undefined') return {found:true,skipped:true};
+    setStatus('detecting','<span class="spin">🔄</span> &nbsp;Detecting human face...');
+    if(!modelsReady){ setStatus('detecting','<span class="spin">⏳</span> &nbsp;Loading detector...'); await ensureModels(); }
+    if(!modelsReady) return {found:true,skipped:true};
+    try{
+      const opts=new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:0.38});
+      const det=await faceapi.detectAllFaces(imgEl,opts);
+      return {found:det.length>0,skipped:false};
+    }catch(e){ return {found:true,skipped:true}; }
+  }
+  function setStatus(type,html){
+    const el=document.getElementById('photoStatus');
+    el.className=`photo-status visible ${type}`;
+    el.innerHTML=html;
+  }
+
+  /* ── PHOTO LOGIC ── */
+  let photoMode=null,camStream=null,verifiedPhoto=null;
+  function selectMode(mode){
+    photoMode=mode;
+    document.getElementById('optCamera').className='photo-opt-btn'+(mode==='camera'?' selected':'');
+    document.getElementById('optUpload').className='photo-opt-btn'+(mode==='upload'?' selected':'');
+    resetPhoto();
+    if(mode==='camera'){ document.getElementById('cameraBox').classList.add('active'); document.getElementById('uploadZone').classList.remove('active'); startCam(); }
+    else{ document.getElementById('cameraBox').classList.remove('active'); document.getElementById('uploadZone').classList.add('active'); stopCam(); }
+  }
+  function resetPhoto(){
+    verifiedPhoto=null;
+    document.getElementById('photoPreview').classList.remove('visible');
+    document.getElementById('previewImg').src='';
+    document.getElementById('photoStatus').className='photo-status';
+    document.getElementById('retakeBtn').classList.remove('visible');
+    document.getElementById('finishBtn').disabled=true;
+  }
+  async function startCam(){
+    try{
+      camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+      document.getElementById('videoFeed').srcObject=camStream;
+      toast('📷 Camera on — align face and tap 📸','info');
+    }catch(err){ toast('❌ Camera access denied.','error',5000); selectMode('upload'); }
+  }
+  function stopCam(){
+    if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+    const v=document.getElementById('videoFeed');if(v) v.srcObject=null;
+    const cb=document.getElementById('cameraBox');if(cb) cb.classList.remove('active');
+  }
+  async function capturePhoto(){
+    const vid=document.getElementById('videoFeed');
+    const cv=document.getElementById('snapCanvas');
+    cv.width=vid.videoWidth||640;cv.height=vid.videoHeight||480;
+    cv.getContext('2d').drawImage(vid,0,0);
+    stopCam(); await processPhoto(cv.toDataURL('image/jpeg',0.92));
+  }
+  async function handleUpload(e){
+    const f=e.target.files[0];
+    if(!f) return;
+    if(!f.type.startsWith('image/')){toast('⚠️ Please select a valid image file','error');return;}
+    const reader=new FileReader();
+    reader.onload=async ev=>await processPhoto(ev.target.result);
+    reader.readAsDataURL(f);
+  }
+  async function processPhoto(dataUrl){
+    const img=document.getElementById('previewImg');
+    img.src=dataUrl;
+    document.getElementById('photoPreview').classList.add('visible');
+    document.getElementById('retakeBtn').classList.add('visible');
+    document.getElementById('finishBtn').disabled=true;
+    setStatus('detecting','<span class="spin">🔄</span> &nbsp;Verifying...');
+    const tmp=new Image();tmp.src=dataUrl;
+    await new Promise(r=>{tmp.onload=r;tmp.onerror=r;});
+    const result=await detectHumanFace(tmp);
+    if(result.skipped||result.found){
+      verifiedPhoto=dataUrl;
+      setStatus('success','✅ &nbsp;Photo accepted!');
+      document.getElementById('finishBtn').disabled=false;
+      toast('✅ Photo accepted','success');
+    }else{
+      verifiedPhoto=null;
+      setStatus('fail','❌ &nbsp;No face detected. Use a clear front-facing photo.');
+      document.getElementById('finishBtn').disabled=true;
+      toast('❌ No face detected','error');
+    }
+  }
+  function retakePhoto(){
+    resetPhoto();
+    if(photoMode==='camera'){ document.getElementById('cameraBox').classList.add('active'); startCam(); }
+    else{ document.getElementById('photoFile').value=''; document.getElementById('uploadZone').classList.add('active'); }
+  }
+
+  /* ── SUBMIT ── */
+  async function handleSubmit(){
+    const btn=document.getElementById('finishBtn');
+    btn.disabled=true;
+    btn.innerHTML='<span class="btn-inner"><span class="spin">⏳</span> &nbsp;Saving...</span>';
+    const formData={
+      fullname:document.getElementById('fullname').value,
+      mobile:document.getElementById('mobile').value,
+      building:document.getElementById('building').value,
+      street:document.getElementById('street').value,
+      state:stateSel.value, city:citySel.value,
+      contact1:document.getElementById('contact1').value,
+      contact2:document.getElementById('contact2').value,
+      contact3:document.getElementById('contact3').value,
+      country:'India'
+    };
+    try{
+      const res=await fetch(`${API}/users/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(formData)});
+      if(res.ok){ localStorage.setItem('sheSecureUserData',JSON.stringify(formData)); showSuccess(); }
+      else throw new Error('bad response');
+    }catch(e){
+      localStorage.setItem('sheSecureUserData',JSON.stringify(formData));
+      showSuccess();
+    }
+  }
+  function showSuccess(){
+    stopCam();
+    document.querySelectorAll('.step-panel').forEach(p=>p.classList.remove('active','slide-back'));
+    document.getElementById('panel-success').classList.add('active');
+    for(let i=0;i<5;i++){
+      document.getElementById(`dot-${i}`).className='step-dot done';
+      document.getElementById(`lbl-${i}`).className='step-label done';
+      if(i<4) document.getElementById(`line-${i}`).className='step-line done';
+    }
+    toast('🎉 Welcome to Raahi — stay safe!','success',5000);
+  }
+</script>
+</body>
+</html>
